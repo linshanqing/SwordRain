@@ -623,4 +623,4 @@ FirePackage::FirePackage()
     addMetaObject<TianyiCard>();
 }
 
-ADD_PACKAGE(Fire);
+ADD_PACKAGE(Fire)

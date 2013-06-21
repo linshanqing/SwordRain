@@ -122,7 +122,8 @@ SOURCES += \
     src/core/WrappedCard.cpp \
     src/core/record-analysis.cpp \
     src/package/assassinspackage.cpp \
-    src/package/hegemony.cpp
+    src/package/hegemony.cpp \
+    src/package/swordrain.cpp
 HEADERS += \
     src/client/aux-skills.h \
     src/client/client.h \
@@ -233,7 +234,8 @@ HEADERS += \
     src/core/WrappedCard.h \
     src/core/record-analysis.h \
     src/package/assassinspackage.h \
-    src/package/hegemony.h
+    src/package/hegemony.h \
+    src/package/swordrain.h
 
 FORMS += \
     src/dialog/cardoverview.ui \
