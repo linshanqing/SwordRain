@@ -391,7 +391,7 @@ public:
 };
 
 KongHou::KongHou(Suit suit, int number)
-    :Weapon(suit, number, 2)
+    :Weapon(suit, number, 3)
 {
     setObjectName("KongHou");
     skill = new KongHouSkill;

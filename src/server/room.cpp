@@ -2761,7 +2761,36 @@ void Room::damage(DamageStruct &damage_data){
                 break;
         }
 
+
+        // damage rule
+         DamageStruct damage = data.value<DamageStruct>();
+        if (damage_data.from){
+            if (damage_data.from->isAlive()){
+                if (damage_data.to->isAlive()){
+                    switch(damage_data.nature)
+                    {
+                    case DamageStruct::Ice://冰杀
+                        if(damage.card && damage.card->isKindOf("IceSlash") && !damage.to->isNude()
+                           && !damage.chain && !damage.transfer && damage.from->askForSkillInvoke("IceSword", data)){
+                            Room* room = damage.from->getRoom();
+                               room->setEmotion(damage.to, "weapon/ice_sword");
+                               int card_id = room->askForCardChosen(damage.from, damage.to, "he", "IceSword");
+                               room->throwCard(Sanguosha->getCard(card_id), damage.to, damage.from);
+
+                               if(!damage.to->isNude()){
+                                   card_id = room->askForCardChosen(damage.from, damage.to, "he", "IceSword");
+                                   room->throwCard(Sanguosha->getCard(card_id), damage.to, damage.from);
+                               }
+
+                               return;
+                         }
+                    }
+                }
+            }
+        }
+
         damage_data = data.value<DamageStruct>();
+
 
         // DamageInflicted
         bool broken = thread->trigger(DamageInflicted, this, damage_data.to, data);
@@ -2780,34 +2809,7 @@ void Room::damage(DamageStruct &damage_data){
         if(damage_data.from){
             thread->trigger(Damage, this, damage_data.from, data);
         }
-        // damage rule
-        if (damage_data.from){
-            if (damage_data.from->isAlive()){
-                if (damage_data.to->isAlive()){
-                    switch(damage_data.nature)
-                    {
-                    case DamageStruct::Ice://冰杀
-                        if (damage_data.from != damage_data.to){
-                            if (this->askForSkillInvoke(damage_data.from, "IceDamage", data)){
-                                int hpA = damage_data.from->getHp();
-                                int hpB = damage_data.to->getHp();
-                                int mhpA = damage_data.from->getMaxHp();
-                                int mhpB = damage_data.to->getMaxHp();
-                                if (hpA > mhpB){
-                                    hpA = mhpB;
-                                }
-                                if (hpB > mhpA){
-                                    hpB = mhpA;
-                                }
-                                this->setPlayerProperty(damage_data.from, "hp", hpB);
-                                this->setPlayerProperty(damage_data.to, "hp", hpA);
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-        }
+
 
         // damaged
         thread->trigger(Damaged, this, damage_data.to, data);
