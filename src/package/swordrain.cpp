@@ -300,12 +300,12 @@ public:
                 source->loseMark("@absord");
                 reco.recover --;
                 player->drawCards(2);
-                room->setPlayerMark(source, "wugudr", 1);
+                room->setPlayerMark(source, "wugudr", 1);//mark it
                 data = QVariant::fromValue(reco);
             }
             break;
         }
-        case HpRecover:{
+        case HpRecover:{//Draw one card after Recover
             foreach(ServerPlayer *who, room->getAlivePlayers()){
                 if(who->getMark("wugudr")){
                     who->setMark("wugudr", 0);
@@ -449,7 +449,7 @@ public:
         }
         case EventPhaseEnd:{
             QList<int>mings = player->getPile("ming");
-            if(!mings.isEmpty() && player->askForSkillInvoke(objectName()) && player->getPhase() == Player::Finish){
+            if(!mings.isEmpty() && player->getPhase() == Player::Finish && player->askForSkillInvoke(objectName())){
                 room->fillAG(mings, player);
                 int dis = room->askForAG(player, mings, false, objectName());
                 player->invoke("clearAG");
@@ -518,10 +518,81 @@ public:
     }
 };
 
+SRYuyanCard::SRYuyanCard(){
+
+}
+
+bool SRYuyanCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    return !to_select->isKongcheng() && targets.isEmpty() && to_select != Self;
+}
+
+void SRYuyanCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    Card::Suit suit = room->askForSuit(source, "sryuyan");
+    QString cardType = room->askForChoice(source, "sryuyan", "basic+trick+equip", QVariant());
+    ServerPlayer *dest = targets.first();
+    int id = room->askForCardChosen(source, dest, "h", "sryuyan");
+    Card *cd = Sanguosha->getCard(id);
+    CardMoveReason reason(CardMoveReason::S_REASON_ROB, source->objectName());
+    room->moveCardTo(cd, source, Player::PlaceHand, reason, true);
+    if(cd->getSuit() == suit && cd->getType() == cardType)
+        return;
+    room->setPlayerFlag(source, "yuyanfail");
+    room->askForDiscard(source, "sryuyan", 1, 1);
+    return;
+}
+
+class SRYuyan: public ZeroCardViewAsSkill{//The skill should be "指定其他一名有手牌角色，然后说出一种花色和卡的类型"
+public:
+    SRYuyan():ZeroCardViewAsSkill("sryuyan"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return !player->hasFlag("yuyanfail");
+    }
+
+    virtual const Card *viewAs() const{
+        return new SRYuyanCard;
+    }
+};
+
+class SRMeixi: public TriggerSkill{
+public:
+    SRMeixi():TriggerSkill("srmeixi"){
+        events << Dying;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DyingStruct dying = data.value<DyingStruct>();
+        if(dying.who != player || player->isKongcheng())
+            return false;
+        if(room->askForCard(player, "BasicCard,TrickCard|.|.|.", "@srmeixi")){
+            room->broadcastSkillInvoke(objectName());
+            CardsMoveStruct move;
+            QList<int>ids = room->getNCards(1, false);
+            move.to_place = Player::PlaceTable;
+            move.card_ids = ids;
+            CardMoveReason reason(CardMoveReason::S_REASON_TURNOVER, player->objectName());
+            move.reason = reason;
+            room->moveCardsAtomic(move, true);
+            room->getThread()->delay();
+            Card *card = Sanguosha->getCard(ids.first());
+            if(card->isRed()){
+                RecoverStruct reco;
+                reco.who = player;
+                reco.card = card;
+                reco.recover = 1 - player->getHp();
+                room->recover(player, reco);
+            }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu, *srzixuan, *spmengli;
+    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
@@ -544,9 +615,14 @@ SwordRainPackage::SwordRainPackage()
     spmengli->addSkill(new SRJingxiang);
     spmengli->addSkill(new SRHuanming);
 
+    srxuanyu = new General(this, "srxuanyu", "qun", 3, false);
+    srxuanyu->addSkill(new SRYuyan);
+    srxuanyu->addSkill(new SRMeixi);
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
+    addMetaObject<SRYuyanCard>();
 }
 
 ADD_PACKAGE(SwordRain)
