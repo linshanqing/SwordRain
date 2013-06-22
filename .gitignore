@@ -38,3 +38,6 @@ tags
 .cproject
 .project
 .settings
+Qt*.dll
+extensions/
+extension-docs/
