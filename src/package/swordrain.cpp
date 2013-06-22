@@ -18,10 +18,14 @@ public:
         if(target->askForSkillInvoke(objectName())){
             bool success = target->pindian(damage.from, objectName());
             if(success){
-                qSwap(damage.from, damage.to);
                 Room *room = target->getRoom();
                 room->broadcastSkillInvoke(objectName());
-                room->damage(damage);
+                DamageStruct dam;
+                dam.to = damage.from;
+                dam.from = damage.to;
+                dam.nature = damage.nature;
+                dam.damage = damage.damage;
+                room->damage(dam);
             }
         }
         return;
@@ -34,11 +38,11 @@ public:
         frequency = Compulsory;
     }
 
-    virtual void onPhaseChange(ServerPlayer *target) const{
-        if(!target->isKongcheng())
-            return;
+    virtual bool onPhaseChange(ServerPlayer *target) const{
+        if(!target->isKongcheng() || target->getPhase() != Player::Start)
+            return false;
         int x = target->getHp() - target->getHandcardNum();
-        if(x <= 0) return;
+        if(x <= 0) return false;
 
         LogMessage log;
         log.type = "#TriggerSkill";
@@ -49,6 +53,7 @@ public:
         room->sendLog(log);
 
         target->drawCards(x);
+        return false;
     }
 };
 
@@ -103,14 +108,14 @@ class SRLengyue: public TriggerSkill{
 public:
     SRLengyue():TriggerSkill("srlengyue"){
         events << EventPhaseStart << SlashProceed << TargetConfirmed;
-        view_as_skill = SRLengyueView;
+        view_as_skill = new SRLengyueView;
     }
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         QList<ServerPlayer *>others = room->getOtherPlayers(player);
         switch(event){
         case EventPhaseStart:{
-            if(!player->getPhase() == Player::Start)
+            if(player->getPhase() != Player::Start)
                 return false;
             int myRange = player->getAttackRange(), bigger = 0;
             foreach(ServerPlayer *other, others){
@@ -125,23 +130,30 @@ public:
         }
         case SlashProceed:{
             SlashEffectStruct effect = data.value<SlashEffectStruct>();
-            Slash *slash = effect.slash;
+            const Slash *slash = effect.slash;
             if(slash->isVirtualCard() && slash->getSkillName() == objectName() && player->hasFlag("lengyue")){
                 room->setPlayerFlag(player, "-lengyue");
                 room->slashResult(effect, NULL);
                 return true;
             }
+            break;
         }
         case TargetConfirmed:{
             int myRange = player->getAttackRange(), smaller = 0;
+            CardUseStruct use = data.value<CardUseStruct>();
+            if(use.from == player || !use.to.contains(player))
+                return false;
+            const Card *card = use.card;
+            if(!card->isKindOf("Slash") && !card->isKindOf("Duel") && !card->isKindOf("SavageAssault") && !card->isKindOf("ArcheryAttack"))
+                return false;
             foreach(ServerPlayer *other, others){
                 int hisRange = other->getAttackRange();
                 if(hisRange < myRange)
                     smaller ++;
             }
-            if(smaller == 0){
-                Card *card = room->askForCard(player, ".|.|.|hand", "@srlengyuecz", data, Card::MethodNone);
-                if(card && !player->isKongcheng()){
+            if(smaller == 0 && !player->isKongcheng()){
+                const Card *card = room->askForCard(player, ".|.|.|hand", "@srlengyuecz", data, Card::MethodNone);
+                if(card){
                     room->broadcastSkillInvoke(objectName(), 2);
                     CardsMoveStruct move;
                     move.card_ids << card->getEffectiveId();
@@ -249,10 +261,111 @@ public:
     }
 };
 
+class SRWuguGet: public TriggerSkill{
+public:
+    SRWuguGet():TriggerSkill("#srwugu"){
+        events << Damage << Damaged;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target->getMark("jiejin")?(target->getMark("@absord")>0):true;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DamageStruct damage = data.value<DamageStruct>();
+        if(damage.nature != DamageStruct::Normal){
+            room->broadcastSkillInvoke("srwugu", 1);
+            player->gainMark("@absord");
+        }
+        return false;
+    }
+};
+
+class SRWugu: public TriggerSkill{
+public:
+    SRWugu():TriggerSkill("srwugu"){
+        events << PreHpRecover << HpRecover;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target != NULL;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case PreHpRecover:{
+            ServerPlayer *source = room->findPlayerBySkillName(objectName());
+            RecoverStruct reco = data.value<RecoverStruct>();
+            if(source && source->getMark("@absord") && source->askForSkillInvoke(objectName())){
+                source->loseMark("@absorb");
+                reco.recover --;
+                player->drawCards(2);
+                room->setPlayerMark(source, "wugudr", 1);
+                data = QVariant::fromValue(reco);
+            }
+            break;
+        }
+        case HpRecover:{
+            foreach(ServerPlayer *who, room->getAlivePlayers()){
+                if(who->getMark("wugudr")){
+                    who->setMark("wugudr", 0);
+                    who->drawCards(1);
+                }
+            }
+            break;
+        }
+        }
+        return false;
+    }
+};
+
+class SRJuling: public TriggerSkill{
+public:
+    SRJuling():TriggerSkill("srjuling"){
+        events << AfterDrawNCards;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target != NULL;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        QList<ServerPlayer *>julings = room->findPlayersBySkillName(objectName());
+        foreach(ServerPlayer *p, julings){
+            if(p->getHandcardNum() < p->getMaxHp()){
+                room->broadcastSkillInvoke(objectName());
+                p->drawCards(1);
+            }
+        }
+        return false;
+    }
+};
+
+class SRJiejin: public PhaseChangeSkill{
+public:
+    SRJiejin():PhaseChangeSkill("srjiejin"){
+        frequency = Wake;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->hasSkill(objectName()) && !target->getMark("jiejin") && target->getMark("@absord") >= 2;
+    }
+
+    virtual bool onPhaseChange(ServerPlayer *target) const{
+        Room *room = target->getRoom();
+        room->broadcastSkillInvoke(objectName());
+        target->setMark("jiejin", 1);
+        target->gainMark("@waked");
+        room->loseMaxHp(target);
+        room->acquireSkill(target, "srjiling");
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu;
+    General *sryueru, *srsuyu, *srzixuan;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
@@ -265,5 +378,15 @@ SwordRainPackage::SwordRainPackage()
     srsuyu->addSkill(new SRBingyun);
     related_skills.insertMulti("sryushang", "#sryushang");
 
+    srzixuan = new General(this, "srzixuan", "wei", 4, false);
+    srzixuan->addSkill(new SRWugu);
+    srzixuan->addSkill(new SRWuguGet);
+    srzixuan->addSkill(new SRJiejin);
+    srzixuan->addRelateSkill("srjuling");
+
+    skills << new SRJuling;
+
     addMetaObject<SRLengyueCard>();
 }
+
+ADD_PACKAGE(SwordRain)

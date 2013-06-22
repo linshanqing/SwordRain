@@ -21,6 +21,7 @@ config = {
 		"YJCM2012",
 		"Assassins", 
 		"Special3v3",
+		"SwordRain",
 		"SP",
 		"BGM",
 		"Hegemony",
