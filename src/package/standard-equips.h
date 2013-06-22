@@ -24,19 +24,19 @@ public:
     Q_INVOKABLE QinggangSword(Card::Suit suit = Spade, int number = 6);
 };
 
-class Blade:public Weapon{
-    Q_OBJECT
+//class Blade:public Weapon{
+//    Q_OBJECT
 
-public:
-    Q_INVOKABLE Blade(Card::Suit suit = Spade, int number = 5);
-};
+//public:
+//    Q_INVOKABLE Blade(Card::Suit suit = Spade, int number = 5);
+//};
 
-class Spear:public Weapon{
-    Q_OBJECT
+//class Spear:public Weapon{
+//    Q_OBJECT
 
-public:
-    Q_INVOKABLE Spear(Card::Suit suit = Spade, int number = 12);
-};
+//public:
+//    Q_INVOKABLE Spear(Card::Suit suit = Spade, int number = 12);
+//};
 
 class Axe:public Weapon{
     Q_OBJECT
@@ -73,6 +73,13 @@ public:
     Q_INVOKABLE KongHou(Card::Suit suit = Club, int number = 6);
 };
 
+class Hook:public Weapon{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE Hook(Card::Suit suit = Heart, int number = 11);
+};
+
 class EightDiagram:public Armor{
     Q_OBJECT
 
@@ -80,14 +87,6 @@ public:
     Q_INVOKABLE EightDiagram(Card::Suit suit, int number = 2);
 };
 
-
-
-class IceSword: public Weapon{
-    Q_OBJECT
-
-public:
-    Q_INVOKABLE IceSword(Card::Suit suit, int number);
-};
 
 class RenwangShield: public Armor{
     Q_OBJECT
