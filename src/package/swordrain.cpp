@@ -268,7 +268,7 @@ public:
     }
 
     virtual bool triggerable(const ServerPlayer *target) const{
-        return target->getMark("jiejin")?(target->getMark("@absord")>0):true;
+        return target->hasSkill(objectName()) && (target->getMark("jiejin")?(target->getMark("@absord")==0):true);
     }
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
@@ -297,7 +297,7 @@ public:
             ServerPlayer *source = room->findPlayerBySkillName(objectName());
             RecoverStruct reco = data.value<RecoverStruct>();
             if(source && source->getMark("@absord") && source->askForSkillInvoke(objectName())){
-                source->loseMark("@absorb");
+                source->loseMark("@absord");
                 reco.recover --;
                 player->drawCards(2);
                 room->setPlayerMark(source, "wugudr", 1);
@@ -323,6 +323,7 @@ class SRJuling: public TriggerSkill{
 public:
     SRJuling():TriggerSkill("srjuling"){
         events << AfterDrawNCards;
+        frequency = Frequent;
     }
 
     virtual bool triggerable(const ServerPlayer *target) const{
@@ -332,7 +333,7 @@ public:
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         QList<ServerPlayer *>julings = room->findPlayersBySkillName(objectName());
         foreach(ServerPlayer *p, julings){
-            if(p->getHandcardNum() < p->getMaxHp()){
+            if(p->getHandcardNum() < p->getMaxHp() && p->askForSkillInvoke(objectName())){
                 room->broadcastSkillInvoke(objectName());
                 p->drawCards(1);
             }
@@ -348,7 +349,8 @@ public:
     }
 
     virtual bool triggerable(const ServerPlayer *target) const{
-        return target && target->hasSkill(objectName()) && !target->getMark("jiejin") && target->getMark("@absord") >= 2;
+        return target && target->hasSkill(objectName()) && target->getPhase() == Player::Start &&
+                !target->getMark("jiejin") && target->getMark("@absord") >= 2;
     }
 
     virtual bool onPhaseChange(ServerPlayer *target) const{
@@ -358,6 +360,160 @@ public:
         target->gainMark("@waked");
         room->loseMaxHp(target);
         room->acquireSkill(target, "srjiling");
+        int x = target->getMark("@absord");
+        target->loseAllMarks("@absord");
+        target->drawCards(x);
+        return false;
+    }
+};
+
+class SRJingxiang: public TriggerSkill{
+public:
+    SRJingxiang():TriggerSkill("srjingxiang"){
+        events << PostHpReduced << EventPhaseStart << HpChanged << Damaged;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case PostHpReduced:{
+            if(player->getHp() <= 0 && player->getMark("@jingxiang") == 0 && player->askForSkillInvoke(objectName())){
+                room->broadcastSkillInvoke(objectName(), 1);
+                player->gainMark("@jingxiang");
+                room->setPlayerProperty(player, "hp", QVariant(0));
+                return true;
+            }
+            if(player->getHp() <= 0 && player->getMark("@jingxiang")){
+                room->broadcastSkillInvoke(objectName(), 1);
+                room->setPlayerProperty(player, "hp", QVariant(0));
+                return true;
+            }
+            break;
+        }
+        case Damaged:{
+            DamageStruct damage = data.value<DamageStruct>();
+            if(player->getMark("@jingxiang") > 0 && player->getHp() < 1 && damage.nature == DamageStruct::Thunder){
+                room->broadcastSkillInvoke(objectName(), 2);
+                player->gainMark("@jingxiang");
+            }
+            break;
+        }
+        case HpChanged:{
+            if(player->getHp() > 0 && player->getMark("@jingxiang")){
+                room->broadcastSkillInvoke(objectName(), 3);
+                player->loseAllMarks("@jingxiang");
+            }
+            break;
+        }
+        case EventPhaseStart:{
+            switch(player->getPhase()){
+            case Player::Start:{
+                if(player->getMark("@jingxiang")){
+                    room->broadcastSkillInvoke(objectName(), 1);
+                    player->gainMark("@jingxiang");
+                }
+                break;
+            }
+            case Player::NotActive:{
+                if(player->getMark("@jingxiang") >= 3){
+                    room->broadcastSkillInvoke(objectName(), 4);
+                    room->killPlayer(player);
+                }
+                break;
+            }
+            default: break;
+            }
+        }
+        default: break;
+        }
+        return false;
+    }
+};
+
+class SRHuanming: public TriggerSkill{
+public:
+    SRHuanming():TriggerSkill("srhuanming"){
+        events << CardFinished << EventPhaseEnd;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case CardFinished:{
+            CardUseStruct use = data.value<CardUseStruct>();
+            if(!use.card->isVirtualCard() && use.card->isKindOf("Slash")
+                    //&& room->getCardPlace(use.card->getEffectiveId()) == Player::PlaceTable
+                    && player->getPile("ming").length() < 4){
+                room->broadcastSkillInvoke(objectName(), 1);
+                player->addToPile("ming", use.card);
+            }
+            break;
+        }
+        case EventPhaseEnd:{
+            QList<int>mings = player->getPile("ming");
+            if(!mings.isEmpty() && player->askForSkillInvoke(objectName()) && player->getPhase() == Player::Finish){
+                room->fillAG(mings, player);
+                int dis = room->askForAG(player, mings, false, objectName());
+                player->invoke("clearAG");
+                Card *card = Sanguosha->getCard(dis);
+                CardMoveReason reason(CardMoveReason::S_REASON_REMOVE_FROM_PILE, player->objectName());
+                room->throwCard(card, reason, NULL);
+                switch(card->getSuit()){
+                case Card::Spade:{
+                    room->broadcastSkillInvoke(objectName(), 2);
+                    QList<int>to_backs;
+                    foreach(int id, room->getDiscardPile()){
+                        Card *to_back = Sanguosha->getCard(id);
+                        if(to_back->isKindOf("Slash"))
+                            to_backs << id;
+                    }
+                    if(to_backs.isEmpty())
+                        return false;
+                    ServerPlayer *who = room->askForPlayerChosen(player, room->getOtherPlayers(player), objectName());
+                    room->fillAG(to_backs, who);
+                    int get = room->askForAG(who, to_backs, false, objectName());
+                    who->invoke("clearAG");
+                    CardsMoveStruct move;
+                    move.card_ids << get;
+                    move.to = who;
+                    move.to_place = Player::PlaceHand;
+                    CardMoveReason reason(CardMoveReason::S_REASON_GOTBACK, who->objectName());
+                    move.reason = reason;
+                    room->moveCards(move, true);
+                    break;
+                }
+                case Card::Heart:{
+                    AmazingGrace *amg = new AmazingGrace(Card::NoSuit, 0);
+                    amg->setSkillName(objectName());
+                    CardUseStruct use;
+                    use.from = player;
+                    use.card = amg;
+                    room->broadcastSkillInvoke(objectName(), 3);
+                    room->useCard(use);
+                    break;
+                }
+                case Card::Club:{
+                    room->broadcastSkillInvoke(objectName(), 4);
+                    player->drawCards(1);
+                    break;
+                }
+                case Card::Diamond:{
+                    room->broadcastSkillInvoke(objectName(), 5);
+                    QList<ServerPlayer *>to_select;
+                    foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+                        if(!p->isKongcheng())
+                            to_select << p;
+                    }
+                    if(to_select.isEmpty())
+                        return false;
+                    ServerPlayer *who = room->askForPlayerChosen(player, to_select, objectName());
+                    room->askForDiscard(who, objectName(), 1, 1);
+                    break;
+                }
+                default: break;
+                }
+            }
+        }
+        default: break;
+        }
         return false;
     }
 };
@@ -365,7 +521,7 @@ public:
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu, *srzixuan;
+    General *sryueru, *srsuyu, *srzixuan, *spmengli;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
@@ -383,6 +539,10 @@ SwordRainPackage::SwordRainPackage()
     srzixuan->addSkill(new SRWuguGet);
     srzixuan->addSkill(new SRJiejin);
     srzixuan->addRelateSkill("srjuling");
+
+    spmengli = new General(this, "spmengli", "wu", 3, false);
+    spmengli->addSkill(new SRJingxiang);
+    spmengli->addSkill(new SRHuanming);
 
     skills << new SRJuling;
 
