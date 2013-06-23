@@ -333,7 +333,7 @@ public:
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         QList<ServerPlayer *>julings = room->findPlayersBySkillName(objectName());
         foreach(ServerPlayer *p, julings){
-            if(p->getHandcardNum() < p->getMaxHp() && p->askForSkillInvoke(objectName())){
+            if(player != p && p->getHandcardNum() < p->getMaxHp() && p->askForSkillInvoke(objectName())){
                 room->broadcastSkillInvoke(objectName());
                 p->drawCards(1);
             }
