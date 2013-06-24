@@ -363,6 +363,19 @@ DistanceSkill::DistanceSkill(const QString &name)
 {
 }
 
+AttackRangeSkill::AttackRangeSkill(const QString &name)
+    : Skill(name, Skill::Compulsory)
+{
+}
+
+int AttackRangeSkill::getExtraRange(const Player *player) const{
+  return 0;
+}
+
+int AttackRangeSkill::filterAttackRange(const Player *player) const{
+  return 0;
+}
+
 MaxCardsSkill::MaxCardsSkill(const QString &name)
     :Skill(name, Skill::Compulsory)
 {

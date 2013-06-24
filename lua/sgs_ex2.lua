@@ -169,6 +169,25 @@ TriggerSkill = class("TriggerSkill", Skill)
     
     return skill
   end
+  
+   AttackRangeSkill = class("AttackRangeSkill", Skill)
+
+  function AttackRangeSkill:to_skill()
+  assert(type(self.name) == "string")
+  assert(type(self.range_func) == "function" or type(self.filter_func) == "function")
+  
+  local skill = sgs.LuaAttackRangeSkill(self.name)
+  
+  skill.range_func = function(...)
+    return self.range_func(self, ...)
+  end
+  
+  skill.filter_func = function(...)
+    return self.filter_func(self, ...)
+  end
+  
+  return skill
+  end
 
 
 ProhibitSkill = class("ProhibitSkill", Skill)

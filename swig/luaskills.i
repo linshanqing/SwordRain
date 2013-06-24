@@ -36,6 +36,14 @@ public:
     virtual void onGameStart(ServerPlayer *player) const;
 };
 
+class AttackRangeSkill: public Skill {
+public:
+    AttackRangeSkill(const QString &name);
+
+  virtual int getExtraRange(const Player *player) const = 0;
+  virtual int filterAttackRange(const Player *player) const = 0;
+};
+
 class DistanceSkill: public Skill{
 public:
     DistanceSkill(const QString &name);
@@ -137,6 +145,16 @@ public:
     virtual int getCorrect(const Player *from, const Player *to) const;
 
     LuaFunction correct_func;
+};
+
+class LuaAttackRangeSkill: public AttackRangeSkill {
+public:
+    LuaAttackRangeSkill(const char *name);
+    virtual int getExtraRange(const Player *player) const;
+  virtual int filterAttackRange(const Player *player) const;
+
+    LuaFunction range_func;
+  LuaFunction filter_func;
 };
 
 class LuaMaxCardsSkill: public MaxCardsSkill{
@@ -296,6 +314,52 @@ int LuaDistanceSkill::getCorrect(const Player *from, const Player *to) const{
     lua_pop(L, 1);
 
     return correct;
+}
+
+int LuaAttackRangeSkill::getExtraRange(const Player *player) const{
+    if (range_func == 0)
+        return 0;
+
+    lua_State *L = Sanguosha->getLuaState();
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, range_func);
+
+    SWIG_NewPointerObj(L, this, SWIGTYPE_p_LuaAttackRangeSkill, 0);
+    SWIG_NewPointerObj(L, player, SWIGTYPE_p_Player, 0);
+
+    int error = lua_pcall(L, 2, 1, 0);
+    if (error) {
+        Error(L);
+        return 0;
+    }
+
+    int range = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    return range;
+}
+
+int LuaAttackRangeSkill::filterAttackRange(const Player *player) const{
+    if (filter_func == 0)
+        return 0;
+
+    lua_State *L = Sanguosha->getLuaState();
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, filter_func);
+
+    SWIG_NewPointerObj(L, this, SWIGTYPE_p_LuaAttackRangeSkill, 0);
+    SWIG_NewPointerObj(L, player, SWIGTYPE_p_Player, 0);
+
+    int error = lua_pcall(L, 2, 1, 0);
+    if (error) {
+        Error(L);
+        return 0;
+    }
+
+    int filter = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    return filter;
 }
 
 int LuaMaxCardsSkill::getExtra(const Player *target) const{

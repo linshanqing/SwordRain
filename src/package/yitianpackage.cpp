@@ -169,6 +169,18 @@ public:
     }
 };
 
+class Zhengfeng: public AttackRangeSkill{
+public:
+  Zhengfeng():AttackRangeSkill("zhengfeng"){
+  }
+
+  virtual int filterAttackRange(const Player *player) const{
+    int hp = player->getHp();
+    if (player->hasSkill(objectName()) && !(player->getWeapon()) && (hp > 1))
+      return hp;
+  }
+};
+
 class WeiwudiGuixin: public PhaseChangeSkill{
 public:
     WeiwudiGuixin():PhaseChangeSkill("weiwudi_guixin"){
@@ -1917,7 +1929,7 @@ YitianPackage::YitianPackage()
     zhanggongqi->addSkill(new Xiliang);
 
     General *yitianjian = new General(this, "yitianjian", "wei");
-    yitianjian->addSkill(new Skill("zhengfeng", Skill::Compulsory));
+    yitianjian->addSkill(new Zhengfeng);
     yitianjian->addSkill(new Zhenwei);
     yitianjian->addSkill(new Yitian);
 

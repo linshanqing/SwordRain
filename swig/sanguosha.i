@@ -834,6 +834,7 @@ public:
     int getGeneralCount(bool include_banned = false) const;
     const Skill *getSkill(const char *skill_name) const;
     const TriggerSkill *getTriggerSkill(const char *skill_name) const;
+	QList<const AttackRangeSkill *> getAttackRangeSkills() const;
     const ViewAsSkill *getViewAsSkill(const char *skill_name) const;
     QList<const DistanceSkill *> getDistanceSkills() const;
     QList<const MaxCardsSkill *> getMaxCardsSkills() const;

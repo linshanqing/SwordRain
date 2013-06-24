@@ -14,6 +14,7 @@ class Horse;
 class DelayedTrick;
 class DistanceSkill;
 class TriggerSkill;
+class AttackRangeSkill;
 
 class Player : public QObject
 {
