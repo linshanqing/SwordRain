@@ -59,11 +59,18 @@ public:
     Q_INVOKABLE KylinBow(Card::Suit suit = Heart, int number = 5);
 };
 
+class BlackHurt:public Weapon{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE BlackHurt(Card::Suit suit = Spade, int number = 2);
+};
+
 class MagicSword:public Weapon{
     Q_OBJECT
 
 public:
-    Q_INVOKABLE MagicSword(Card::Suit suit = Spade, int number = 2);
+    Q_INVOKABLE MagicSword(Card::Suit suit = Diamond, int number = 9);
 };
 
 class KongHou:public Weapon{

@@ -376,13 +376,13 @@ public:
         events << SlashMissed;
     }
 
-    virtual bool trigger(TriggerEvent, Room* room, ServerPlayer *pangde, QVariant &data) const{
+    virtual bool trigger(TriggerEvent, Room* room, ServerPlayer *player, QVariant &data) const{
         SlashEffectStruct effect = data.value<SlashEffectStruct>();
         if(effect.to->isAlive() && !effect.to->isNude()){
-            if(pangde->askForSkillInvoke(objectName(), data)){
+            if(player->askForSkillInvoke(objectName(), data)){
                 room->broadcastSkillInvoke(objectName());
-                int to_throw = room->askForCardChosen(pangde, effect.to, "he", objectName());
-                room->throwCard(Sanguosha->getCard(to_throw), effect.to, pangde);
+                int to_throw = room->askForCardChosen(player, effect.to, "he", objectName());
+                room->throwCard(Sanguosha->getCard(to_throw), effect.to, player);
             }
         }
 
@@ -397,9 +397,41 @@ KongHou::KongHou(Suit suit, int number)
     skill = new KongHouSkill;
 }
 
-class MagicSwordSkill:public WeaponSkill{
+
+class MagicSwordSkill: public WeaponSkill{
 public:
-    MagicSwordSkill():WeaponSkill("MagicSword"){
+    MagicSwordSkill():WeaponSkill("MagicSword")
+    {
+        frequency = Compulsory;
+        events << Predamage;
+    }
+
+    virtual bool trigger(TriggerEvent ,  Room* room, ServerPlayer *player, QVariant &data) const
+    {
+        LogMessage log;
+        DamageStruct damage = data.value<DamageStruct>();
+        log.type = "#TriggerSkill";
+        log.from = player;
+        log.arg = objectName();
+        room->sendLog(log);
+        room->broadcastSkillInvoke(objectName());
+        room->loseHp(damage.to, damage.damage);
+        return true;
+    }
+};
+
+
+MagicSword::MagicSword(Suit suit, int number)
+    :Weapon(suit, number, 2)
+{
+    setObjectName("MagicSword");
+    skill = new MagicSwordSkill;
+}
+
+
+class BlackHurtSkill:public WeaponSkill{
+public:
+    BlackHurtSkill():WeaponSkill("BlackHurt"){
         events << TargetConfirmed << SlashProceed << CardFinished;
     }
 
@@ -415,7 +447,7 @@ public:
                    return false;
 
             foreach(ServerPlayer *target, use.to){
-                bool invoke = player->askForSkillInvoke("MagicSwordSkill", QVariant::fromValue(target));
+                bool invoke = player->askForSkillInvoke("BlackHurtSkill", QVariant::fromValue(target));
                 JudgeStruct judge;
                 if(invoke){
                     room->broadcastSkillInvoke(objectName());
@@ -428,19 +460,19 @@ public:
 
                     room->judge(judge);
                 }
-                QVariantList MagicSwordList = target->tag["MagicSword"].toList();
-                MagicSwordList << (invoke && judge.isGood());
-                target->tag["MagicSword"] = MagicSwordList;
-                target->setFlags("MagicSwordTarget");
+                QVariantList BlackHurtList = target->tag["BlackHurt"].toList();
+                BlackHurtList << (invoke && judge.isGood());
+                target->tag["BlackHurt"] = BlackHurtList;
+                target->setFlags("BlackHurtTarget");
             }
         }
         else if(triggerEvent == SlashProceed){
             SlashEffectStruct effect = data.value<SlashEffectStruct>();
-            effect.to->setFlags("-MagicSwordTarget");
-            QVariantList MagicSwordList = effect.to->tag["MagicSword"].toList();
-            if(!MagicSwordList.isEmpty()){
-                bool hit = MagicSwordList.takeFirst().toBool();
-                effect.to->tag["MagicSword"] = MagicSwordList;
+            effect.to->setFlags("-BlackHurtTarget");
+            QVariantList BlackHurtList = effect.to->tag["BlackHurt"].toList();
+            if(!BlackHurtList.isEmpty()){
+                bool hit = BlackHurtList.takeFirst().toBool();
+                effect.to->tag["BlackHurt"] = BlackHurtList;
                 if(hit){
                     room->slashResult(effect, NULL);
                     return true;
@@ -450,19 +482,19 @@ public:
         else if(triggerEvent == CardFinished){
             CardUseStruct use = data.value<CardUseStruct>();
             foreach(ServerPlayer *target, use.to){
-                if(target->hasFlag("MagicSwordTarget"))
-                    target->tag.remove("MagicSword");
+                if(target->hasFlag("BlackHurtTarget"))
+                    target->tag.remove("BlackHurt");
             }
         }
         return false;
     }
 };
 
-MagicSword::MagicSword(Suit suit, int number)
+BlackHurt::BlackHurt(Suit suit, int number)
     :Weapon(suit, number, 2)
 {
-    setObjectName("MagicSword");
-    skill = new MagicSwordSkill;
+    setObjectName("BlackHurt");
+    skill = new BlackHurtSkill;
 }
 
 class HookSkillViewAsSkill:public OneCardViewAsSkill{
@@ -484,7 +516,7 @@ public:
 
     virtual const Card *viewAs(const Card *originalCard) const{
 
-        Card *acard = new FireSlash(originalCard->getSuit(), originalCard->getNumber());
+        Card *acard = new ThunderSlash(originalCard->getSuit(), originalCard->getNumber());
         acard->addSubcard(originalCard->getId());
         acard->setSkillName("HookSkill");
         return acard;
@@ -527,9 +559,9 @@ public:
     }
 };
 
-class TelephoneDummySkill:public GameStartSkill{
+class HookDummySkill:public GameStartSkill{
 public:
-    TelephoneDummySkill():GameStartSkill("HookSkill"){
+    HookDummySkill():GameStartSkill("HookSkill"){
         frequency = Limited;
     }
 
@@ -1501,9 +1533,10 @@ StandardCardPackage::StandardCardPackage()
         << new Axe
         << new Halberd
         << new KylinBow
-        << new MagicSword
+        << new BlackHurt
         << new KongHou
         << new Hook
+         << new  MagicSword
 
         << new EightDiagram(Card::Spade)
         << new EightDiagram(Card::Club);
@@ -1570,7 +1603,7 @@ StandardCardPackage::StandardCardPackage()
         card->setParent(this);
 
     skills /*<< new SpearSkill */<< new AxeViewAsSkill << new HalberdSkill << new HookSkillViewAsSkill
-                                    << new HookTargetMod<< new TelephoneDummySkill;
+                                    << new HookTargetMod<< new HookDummySkill;
 }
 
 StandardExCardPackage::StandardExCardPackage()
