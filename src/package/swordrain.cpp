@@ -589,10 +589,177 @@ public:
     }
 };
 
+class SRHongfu: public TriggerSkill{
+public:
+    SRHongfu():TriggerSkill("srhongfu"){
+        events << TurnStart << EventPhaseStart;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        Room *room = target->getRoom();
+        ServerPlayer *who = room->findPlayerBySkillName(objectName());
+        return who != NULL;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        ServerPlayer *from = room->findPlayerBySkillName(objectName());
+        switch(event){
+        case EventPhaseStart:{
+            if(player->getPhase() == Player::Start){
+                room->setPlayerMark(player, "HongfuCan", 0);
+                foreach(ServerPlayer *p, room->getPlayers()){
+                    if(p->getMark("skip") && p->getHp()){
+                        p->setAlive(true);
+                        room->broadcastProperty(p, "alive");
+                        room->setPlayerMark(p, "skip", 0);
+                    }
+                }
+                if(from && from->getMark("HongfuAtten")){
+                    ServerPlayer *current = room->getCurrent();
+                    if(current->hasSkill(objectName()))
+                        current->drawCards(2);
+                    QList<Player::Phase>phases;
+                    phases << Player::Play;
+                    from->play(phases);
+                    room->setPlayerMark(from, "HongfuAtten", 0);
+                }
+            }
+            break;
+        }
+        case TurnStart:{
+            if(from && !player->hasSkill(objectName()) && !from->getMark("HongfuAtten") && player->getLostHp() > 0){
+                if(!from->askForSkillInvoke(objectName()))
+                    return false;
+                room->setPlayerMark(from, "HongfuCan", 1);
+                player->addMark("skip");
+                player->setAlive(false);
+                room->broadcastProperty(player, "alive");
+                room->loseHp(from);
+                if(from->getHp() < player->getHp())
+                    room->setPlayerMark(from, "HongfuAtten", 1);
+                if(from->isAlive() && from->hasSkill(objectName())){
+                    LogMessage log;
+                    log.type = "#HongfuAttention";
+                    log.from = from;
+                    log.arg = objectName();
+                    room->sendLog(log);
+                }
+            }
+            break;
+        }
+        }
+        return false;
+    }
+};
+
+class SRHongfuClear: public TriggerSkill{
+public:
+    SRHongfuClear():TriggerSkill("#srhongfu-clear"){
+        events << EventLoseSkill << Death;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        bool tri = false;
+        switch(event){
+        case EventLoseSkill:{
+            QString skill = data.toString();
+            if(skill == "srhongfu")
+                tri = true;
+            break;
+        }
+        case Death:{
+            DeathStruct death = data.value<DeathStruct>();
+            if(death.who->hasSkill(objectName()))
+                tri = true;
+            break;
+        }
+        }
+        if(!tri) return false;
+        foreach(ServerPlayer *p, room->getPlayers()){
+            if(p->getMark("skip") && p->getHp() > 0){
+                p->setAlive(true);
+                room->broadcastProperty(p, "alive");
+                if(event == Death)
+                    p->throwAllHandCards();
+                room->setPlayerMark(p, "skip", 0);
+            }
+        }
+        return false;
+    }
+};
+
+class SRQushiRecord: public TriggerSkill{
+public:
+    SRQushiRecord():TriggerSkill("#srqushi-record"){
+        events << GameStart << Death << EventLoseSkill;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target->hasSkill("srqushi");
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case GameStart:{
+            QStringList tag;
+            tag << "cancel";
+            room->setTag("QushiRecord", QVariant(tag));
+            break;
+        }
+        case Death:{
+            DeathStruct death = data.value<DeathStruct>();
+            if(!death.who->hasSkill("srqushi")){
+                QStringList tag = room->getTag("QushiRecord").toStringList();
+                tag << death.who->getGeneralName();
+                room->setTag("QushiRecord", QVariant(tag));
+            }
+            break;
+        }
+        case EventLoseSkill:{
+            if(data.toString() == "srqushi"){
+                room->removeTag("QushiRecord");
+            }
+        }
+        }
+        return false;
+    }
+};
+
+class SRQushi: public TriggerSkill{
+public:
+    SRQushi():TriggerSkill("srqushi"){
+        events << Death;
+    }
+
+    virtual int getPriority() const{
+        return 10;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target->hasSkill(objectName());
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DeathStruct death = data.value<DeathStruct>();
+        if(!death.who->hasSkill(objectName()))
+            return false;
+        QStringList list = room->getTag("QushiRecord").toStringList();
+        if(list.length() == 1)
+            return false;
+        QString choice = room->askForChoice(player, objectName(), list.join("+"), data);
+        if(choice != "cancel"){
+            room->revivePlayer(player);
+            room->changeHero(player, choice, true, true);
+            room->loseMaxHp(player);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu;
+    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
@@ -618,6 +785,14 @@ SwordRainPackage::SwordRainPackage()
     srxuanyu = new General(this, "srxuanyu", "qun", 3, false);
     srxuanyu->addSkill(new SRYuyan);
     srxuanyu->addSkill(new SRMeixi);
+
+    srlengtu = new General(this, "srlengtu", "qun", 3, true);
+    srlengtu->addSkill(new SRHongfu);
+    srlengtu->addSkill(new SRHongfuClear);
+    srlengtu->addSkill(new SRQushi);
+    srlengtu->addSkill(new SRQushiRecord);
+    related_skills.insertMulti("srhongfu", "#srhongfu-clear");
+    related_skills.insertMulti("srqushi", "#srqushi-record");
 
     skills << new SRJuling;
 
