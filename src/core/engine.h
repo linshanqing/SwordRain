@@ -76,7 +76,6 @@ public:
     QStringList getSkillNames() const;
     const TriggerSkill *getTriggerSkill(const QString &skill_name) const;
     const ViewAsSkill *getViewAsSkill(const QString &skill_name) const;
-    QList<const AttackRangeSkill *> getAttackRangeSkills() const;
     QList<const DistanceSkill *> getDistanceSkills() const;
     QList<const MaxCardsSkill *> getMaxCardsSkills() const;
     QList<const TargetModSkill *> getTargetModSkills() const;
@@ -100,7 +99,6 @@ public:
     void playSkillAudioEffect(const QString &skill_name, int index) const;
 
     const ProhibitSkill *isProhibited(const Player *from, const Player *to, const Card *card) const;
-    int correctAttackRange(const AttackRangeSkill::ModType type, const Player *from) const;
     int correctDistance(const Player *from, const Player *to) const;
     int correctMaxCards(const Player *target) const;
     int correctCardTarget(const TargetModSkill::ModType type, const Player *from, const Card *card) const;
@@ -131,7 +129,6 @@ private:
     QList<const DistanceSkill *> distance_skills;
     QList<const MaxCardsSkill *> maxcards_skills;
     QList<const TargetModSkill *> targetmod_skills;
-    QList<const AttackRangeSkill *> attackrange_skills;
 
     QList<Card *> cards;
     QStringList lord_list, nonlord_list;

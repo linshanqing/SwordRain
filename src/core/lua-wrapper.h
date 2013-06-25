@@ -80,19 +80,6 @@ public:
     LuaFunction correct_func;
 };
 
-class LuaAttackRangeSkill: public AttackRangeSkill {
-    Q_OBJECT
-
-public:
-  LuaAttackRangeSkill(const char *name);
-
-  virtual int getExtraRange(const Player *player) const ;
-  virtual int filterAttackRange(const Player *player) const ;
-
-  LuaFunction range_func;
-  LuaFunction filter_func;
-};
-
 class LuaMaxCardsSkill: public MaxCardsSkill{
     Q_OBJECT
 

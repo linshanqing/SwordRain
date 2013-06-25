@@ -589,17 +589,6 @@ public:
     }
 };
 
-class SRTest: public AttackRangeSkill{
-public:
-    SRTest():AttackRangeSkill("srtest"){
-
-    }
-
-    virtual int getExtraRange(const Player *player) const{
-        return 4;
-    }
-};
-
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -629,7 +618,6 @@ SwordRainPackage::SwordRainPackage()
     srxuanyu = new General(this, "srxuanyu", "qun", 3, false);
     srxuanyu->addSkill(new SRYuyan);
     srxuanyu->addSkill(new SRMeixi);
-    //srxuanyu->addSkill(new SRTest);
 
     skills << new SRJuling;
 

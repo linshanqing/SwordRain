@@ -112,20 +112,6 @@ function sgs.CreateTargetModSkill(spec)
 	return skill
 end
 
-function sgs.CreateAttackRangeSkill(spec)
-  assert(type(spec.name) == "string")
-  assert(type(spec.range_func) == "function" or type(spec.filter_func) == "function")
-  
-  local skill = sgs.LuaAttackRangeSkill(spec.name)
-  if spec.range_func then
-    skill.range_func = spec.range_func
-  end
-  if spec.filter_func then
-    skill.filter_func = spec.filter_func
-  end
-  return skill
-end
-
 function sgs.CreateMasochismSkill(spec)
 	assert(type(spec.on_damaged) == "function")
 	

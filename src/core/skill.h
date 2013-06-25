@@ -217,22 +217,6 @@ public:
     virtual int getExtra(const Player *target) const = 0;
 };
 
-class AttackRangeSkill: public Skill{
-    Q_OBJECT
-  Q_ENUMS(ModType)
-
-public:
-  enum ModType {
-        ExtraRange,
-    FilterRange
-    };
-
-  AttackRangeSkill(const QString &name);
-
-  virtual int getExtraRange(const Player *player) const;
-  virtual int filterAttackRange(const Player *player) const;
-};
-
 class TargetModSkill: public Skill {
     Q_OBJECT
     Q_ENUMS(ModType)

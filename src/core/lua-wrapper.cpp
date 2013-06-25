@@ -43,12 +43,6 @@ LuaDistanceSkill::LuaDistanceSkill(const char *name)
 
 }
 
-LuaAttackRangeSkill::LuaAttackRangeSkill(const char *name)
-    : AttackRangeSkill(name), range_func(0), filter_func(0)
-{
-
-}
-
 LuaMaxCardsSkill::LuaMaxCardsSkill(const char *name)
     :MaxCardsSkill(name), extra_func(0)
 {

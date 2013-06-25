@@ -173,13 +173,7 @@ void Engine::addSkills(const QList<const Skill *> &all_skills){
             maxcards_skills << qobject_cast<const MaxCardsSkill *>(skill);
         else if (skill->inherits("TargetModSkill"))
             targetmod_skills << qobject_cast<const TargetModSkill *>(skill);
-        else if (skill->inherits("AttackRangeSkill"))
-            attackrange_skills << qobject_cast<const AttackRangeSkill *>(skill);
     }
-}
-
-QList<const AttackRangeSkill *> Engine::getAttackRangeSkills() const{
-    return attackrange_skills;
 }
 
 QList<const DistanceSkill *> Engine::getDistanceSkills() const{
@@ -929,22 +923,6 @@ int Engine::correctDistance(const Player *from, const Player *to) const{
     }
 
     return correct;
-}
-
-int Engine::correctAttackRange(const AttackRangeSkill::ModType type, const Player *player) const{
-  int x = 0;
-
-  if (type == AttackRangeSkill::ExtraRange) {
-    foreach (const AttackRangeSkill *skill, attackrange_skills){
-      x += skill->getExtraRange(player);
-    }
-  } else if (type == AttackRangeSkill::FilterRange) {
-    foreach (const AttackRangeSkill *skill, attackrange_skills){
-      x = skill->filterAttackRange(player);
-    }
-  }
-
-  return x;
 }
 
 int Engine::correctMaxCards(const Player *target) const{

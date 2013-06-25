@@ -152,7 +152,7 @@ void Player::clearFlags(){
 
 int Player::getAttackRange() const{
     int original_range = 1;
-    //if (hasSkill("zhengfeng") && !weapon && hp > 1) original_range = hp; // @todo_P: new way to remove coupling or just put it into TargetModSkill
+    if (hasSkill("zhengfeng") && !weapon && hp > 1) original_range = hp; // @todo_P: new way to remove coupling or just put it into TargetModSkill
     if (hasFlag("InfinityAttackRange") || getMark("InfinityAttackRange") > 0) original_range = 10000; // Actually infinity
     int weapon_range = 0;
     if (weapon != NULL) {
@@ -160,9 +160,7 @@ int Player::getAttackRange() const{
         Q_ASSERT(card);
         weapon_range = card->getRange();
     }
-    int filter = Sanguosha->correctAttackRange(AttackRangeSkill::FilterRange, this);
-    if (filter) return qMax(filter, 0);
-        return qMax(original_range, weapon_range) + Sanguosha->correctAttackRange(AttackRangeSkill::ExtraRange, this);
+    return qMax(original_range, weapon_range);
 }
 
 bool Player::inMyAttackRange(const Player *other) const{
