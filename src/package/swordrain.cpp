@@ -13,9 +13,13 @@ public:
     }
 
     virtual void onDamaged(ServerPlayer *target, const DamageStruct &damage) const{
-        if(!damage.from || !damage.to || damage.from->isKongcheng() || target->isKongcheng())
+        if(!damage.from || !damage.to || damage.from->isKongcheng())
+            return;
+        if(target->isKongcheng() && !target->getHp())
             return;
         if(target->askForSkillInvoke(objectName())){
+            if(target->isKongcheng())
+                target->drawCards(target->getHp());
             bool success = target->pindian(damage.from, objectName());
             if(success){
                 Room *room = target->getRoom();
@@ -29,31 +33,6 @@ public:
             }
         }
         return;
-    }
-};
-
-class SRQianjin: public PhaseChangeSkill{
-public:
-    SRQianjin():PhaseChangeSkill("srqianjin"){
-        frequency = Compulsory;
-    }
-
-    virtual bool onPhaseChange(ServerPlayer *target) const{
-        if(!target->isKongcheng() || target->getPhase() != Player::Start)
-            return false;
-        int x = target->getHp() - target->getHandcardNum();
-        if(x <= 0) return false;
-
-        LogMessage log;
-        log.type = "#TriggerSkill";
-        log.arg = objectName();
-        log.from = target;
-        Room* room = target->getRoom();
-        room->broadcastSkillInvoke(objectName());
-        room->sendLog(log);
-
-        target->drawCards(x);
-        return false;
     }
 };
 
@@ -756,14 +735,92 @@ public:
     }
 };
 
+class SRLiangshuang: public TriggerSkill{
+public:
+    SRLiangshuang():TriggerSkill("srliangshuang"){
+        frequency = Frequent;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        PhaseChangeStruct change = data.value<PhaseChangeStruct>;
+        if(change.from == Player::Play && player->askForSkillInvoke(objectName())){
+            QList<int> cards = room->getNCards(3);
+            CardsMoveStruct move;
+            move.card_ids = cards;
+            move.to_place = Player::PlaceTable;
+            CardMoveReason reason(CardMoveReason::S_REASON_TURNOVER, player->objectName());
+            move.reason = reason;
+            room->moveCardsAtomic(move, true);
+            room->getThread()->delay();
+            QList<int>to_get, to_throw;
+            foreach(int id, cards){
+                Card *card = Sanguosha->getCard(id);
+                if(card->getSuit() == Card::Club)
+                    to_get << id;
+                else
+                    to_throw << id;
+            }
+            CardsMoveStruct get, thr;
+            get.card_ids = to_get;
+            get.to = player;
+            get.to_place = Player::PlaceHand;
+            CardMoveReason getreason(CardMoveReason::S_REASON_GOTBACK, player->objectName());
+            get.reason = getreason;
+            thr.card_ids = to_throw;
+            thr.to_place = Player::DrawPile;
+            CardMoveReason thrreason(CardMoveReason::S_REASON_PUT, player->objectName());
+            thr.reason = thrreason;
+            QList<CardsMoveStruct>moves;
+            if(!to_get.isEmpty())
+                moves.push_back(get);
+            if(!to_throw.isEmpty())
+                moves.push_back(thr);
+            room->moveCardsAtomic(moves, true);
+        }
+        return false;
+    }
+};
+
+class SRFazhen: public TriggerSkill{
+public:
+    SRFazhen():TriggerSkill("srfazhen"){
+        events << CardEffected;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->hasSkill("srfazhen") && !target->isKongcheng() && TriggerSkill::triggerable(target);
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardEffectStruct effect = data.value<CardEffectStruct>();
+        if(effect.from == player || !effect.card->isKindOf("Slash"))
+            return false;
+        if(effect.card->isVirtualCard() && (effect.card->subcardsLength() > 1 || effect.card->subcardsLength() == 0))
+            return false;
+        const Card *card = effect.card;
+        const Card *dis = room->askForCard(player, ".", "@fazhen"+effect.from+effect.to, data);
+        if(dis){
+            if(dis->getSuit() == Card::Club){
+                if(dis->getNumber() + 3 > card->getNumber())
+                    return true;
+                effect.to->obtainCard(dis);
+            }else{
+                if(dis->getNumber() > card->getNumber())
+                    return true;
+                effect.to->obtainCard(dis);
+            }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu;
+    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu, *srqishuang;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
-    sryueru->addSkill(new SRQianjin);
 
     srsuyu = new General(this, "srsuyu", "wei", 3, false);
     srsuyu->addSkill(new SRLengyue);
@@ -793,6 +850,10 @@ SwordRainPackage::SwordRainPackage()
     srlengtu->addSkill(new SRQushiRecord);
     related_skills.insertMulti("srhongfu", "#srhongfu-clear");
     related_skills.insertMulti("srqushi", "#srqushi-record");
+
+    srqishuang = new General(this, "srqishuang", "wei", 3, false);
+    srqishuang->addSkill(new SRLiangshuang);
+    srqishuang->addSkill(new SRFazhen);
 
     skills << new SRJuling;
 
