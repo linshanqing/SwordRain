@@ -814,10 +814,136 @@ public:
     }
 };
 
+class SRDoubleWeapon: public TriggerSkill{
+public:
+    SRDoubleWeapon():TriggerSkill("srdoubleweapon"){
+        events << CardsMoveOneTime;
+        frequency = Compulsory;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardsMoveOneTimeStar move = data.value<CardsMoveOneTimeStar>();
+        if(move->from && move->from == player){
+            if(move->from_places.contains(Player::PlaceEquip)){
+                foreach(int id, move->card_ids){
+                    if(Sanguosha->getCard(id)->isKindOf("Weapon")){//this skill has bugs
+                        if(player->getWeapon()){
+                            player->removePileByName("theOtherWeapon");
+                            player->addToPile("theOtherWeapon", id);
+                        }else{
+                            CardsMoveStruct move;
+                            move.card_ids = player->getPile("theOtherWeapon");
+                            move.to = player;
+                            move.to_place = Player::PlaceEquip;
+                            room->moveCards(move, false);
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+};
+
+class SRDoubleSlash: public TargetModSkill{
+public:
+    SRDoubleSlash():TargetModSkill("#srdouble"){
+
+    }
+
+    virtual int getResidueNum(const Player *from, const Card *card) const{
+        if(from->hasSkill(objectName()) && !(from->getPile("theOtherWeapon").isEmpty()))
+            return 1;
+        else
+            return 0;
+    }
+
+    virtual int getExtraTargetNum(const Player *from, const Card *card) const{
+        if(from->hasSkill(objectName()) && !from->getPile("theOtherWeapon").isEmpty()){
+            if(from->getWeapon()){
+                QString name = from->getWeapon()->objectName();
+                if(name == "DoubleSword" || name == "IceSword" || name == "QinggangSword")
+                    return 1;
+            }
+        }
+        return 0;
+    }
+};
+
+class SRWuling: public TriggerSkill{
+public:
+    SRWuling():TriggerSkill("srwuling"){
+        events << EventPhaseProceeding;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(player->getPhase()){
+        case Player::Start:{
+            if(player->getHandcardNum() <= player->getHp() && player->getPile("theOtherSword").isEmpty()){
+                player->setFlags("srwuling");
+                int x = qrand()%5 + 1;
+                switch(x){
+                case 1: room->acquireSkill(player, "lieren"); break;
+                case 2: room->acquireSkill(player, "nosxuanfeng"); break;
+                case 3: room->acquireSkill(player, "ganlu"); break;
+                case 4: room->acquireSkill(player, "srleizhou"); break;
+                case 5: room->acquireSkill(player, "srluoyan"); break;
+                default: break;
+                }
+            }
+            break;
+        }
+        case Player::Finish:{
+            if(player->hasFlag("srwuling")){
+                if(player->hasSkill("lieren"))
+                    room->detachSkillFromPlayer(player, "lieren");
+                if(player->hasSkill("nosxuanfeng"))
+                    room->detachSkillFromPlayer(player, "nosxuanfeng");
+                if(player->hasSkill("ganlu"))
+                    room->detachSkillFromPlayer(player, "ganlu");
+                if(player->hasSkill("srleizhou"))
+                    room->detachSkillFromPlayer(player, "srleizhou");
+                if(player->hasSkill("srluoyan"))
+                    room->detachSkillFromPlayer("srluoyan");
+            }
+            break;
+        }
+        default: break;
+        }
+        return false;
+    }
+};
+
+class SRLeizhouEffect: public TriggerSkill{
+public:
+    SRLeizhouEffect():TriggerSkill("#leizhoueffect"){
+        events << SlashMissed;
+        frequency = Frequent;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return true;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        SlashEffectStruct effect = data.value<SlashEffectStruct>();
+        Slash *slash = effect.slash;
+        if(slash->hasFlag("LeizhouSlash")){
+            DamageStruct damage;
+            damage.from = effect.to;
+            damage.to = effect.from;
+            damage.damage = 1;
+            damage.nature = DamageStruct::Thunder;
+            room->damage(damage);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu, *srqishuang;
+    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu, *srqishuang, *splinger;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
@@ -854,6 +980,14 @@ SwordRainPackage::SwordRainPackage()
     srqishuang = new General(this, "srqishuang", "wei", 3, false);
     srqishuang->addSkill(new SRLiangshuang);
     srqishuang->addSkill(new SRFazhen);
+
+    splinger = new General(this, "Splinger", "wei", 4, false);
+    splinger->addSkill(new SRDoubleWeapon);
+    splinger->addSkill(new SRDoubleSlash);
+    splinger->addSkill(new SRWuling);
+    splinger->addSkill(new SRLeizhouEffect);
+    related_skills.insertMulti("srdoubleweapon", "#srdouble");
+    related_skills.insertMulti("srwuling", "#leizhoueffect");
 
     skills << new SRJuling;
 
