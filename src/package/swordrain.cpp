@@ -742,7 +742,7 @@ public:
     }
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
-        PhaseChangeStruct change = data.value<PhaseChangeStruct>;
+        PhaseChangeStruct change = data.value<PhaseChangeStruct>();
         if(change.from == Player::Play && player->askForSkillInvoke(objectName())){
             QList<int> cards = room->getNCards(3);
             CardsMoveStruct move;
@@ -798,7 +798,7 @@ public:
         if(effect.card->isVirtualCard() && (effect.card->subcardsLength() > 1 || effect.card->subcardsLength() == 0))
             return false;
         const Card *card = effect.card;
-        const Card *dis = room->askForCard(player, ".", "@fazhen"+effect.from+effect.to, data);
+        const Card *dis = room->askForCard(player, ".", "@fazhen", data);
         if(dis){
             if(dis->getSuit() == Card::Club){
                 if(dis->getNumber() + 3 > card->getNumber())
@@ -817,29 +817,46 @@ public:
 class SRDoubleWeapon: public TriggerSkill{
 public:
     SRDoubleWeapon():TriggerSkill("srdoubleweapon"){
-        events << CardsMoveOneTime;
+        events << CardsMoveOneTime << BeforeCardsMove;
         frequency = Compulsory;
     }
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         CardsMoveOneTimeStar move = data.value<CardsMoveOneTimeStar>();
-        if(move->from && move->from == player){
-            if(move->from_places.contains(Player::PlaceEquip)){
-                foreach(int id, move->card_ids){
-                    if(Sanguosha->getCard(id)->isKindOf("Weapon")){//this skill has bugs
-                        if(player->getWeapon()){
-                            player->removePileByName("theOtherWeapon");
-                            player->addToPile("theOtherWeapon", id);
-                        }else{
-                            CardsMoveStruct move;
-                            move.card_ids = player->getPile("theOtherWeapon");
-                            move.to = player;
-                            move.to_place = Player::PlaceEquip;
-                            room->moveCards(move, false);
+        switch(event){
+        case CardsMoveOneTime:{
+            if(move->from && move->from == player){
+                if(move->from_places.contains(Player::PlaceEquip)){
+                    foreach(int id, move->card_ids){
+                        Card *card = Sanguosha->getCard(id);
+                        if(card->isKindOf("Weapon") && card->hasFlag("double")){//this skill has bugs
+                            if(player->getWeapon()){
+                                player->removePileByName("theOtherWeapon");
+                                player->addToPile("theOtherWeapon", id);
+                            }else{
+                                CardsMoveStruct move;
+                                move.card_ids = player->getPile("theOtherWeapon");
+                                move.to = player;
+                                move.to_place = Player::PlaceEquip;
+                                room->moveCards(move, false);
+                            }
                         }
                     }
                 }
             }
+            break;
+        }
+        case BeforeCardsMove:{
+            if(!move->from || move->from != player)
+                break;
+            foreach (int id, move->card_ids) {
+                Card *card = Sanguosha->getCard(id);
+                if(card->isKindOf("Weapon") && room->getCardPlace(id) == Player::PlaceEquip)
+                    room->setCardFlag(id, "double");
+            }
+            break;
+        }
+        default: break;
         }
         return false;
     }
@@ -904,7 +921,7 @@ public:
                 if(player->hasSkill("srleizhou"))
                     room->detachSkillFromPlayer(player, "srleizhou");
                 if(player->hasSkill("srluoyan"))
-                    room->detachSkillFromPlayer("srluoyan");
+                    room->detachSkillFromPlayer(player, "srluoyan");
             }
             break;
         }
@@ -927,7 +944,7 @@ public:
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         SlashEffectStruct effect = data.value<SlashEffectStruct>();
-        Slash *slash = effect.slash;
+        const Slash *slash = effect.slash;
         if(slash->hasFlag("LeizhouSlash")){
             DamageStruct damage;
             damage.from = effect.to;
