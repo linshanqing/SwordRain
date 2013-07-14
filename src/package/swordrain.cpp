@@ -338,7 +338,7 @@ public:
         target->setMark("jiejin", 1);
         target->gainMark("@waked");
         room->loseMaxHp(target);
-        room->acquireSkill(target, "srjiling");
+        room->acquireSkill(target, "srjuling");
         int x = target->getMark("@absord");
         target->loseAllMarks("@absord");
         target->drawCards(x);
