@@ -836,6 +836,8 @@ public:
                             }else{
                                 CardsMoveStruct move;
                                 move.card_ids = player->getPile("theOtherWeapon");
+                                if(move.card_ids.isEmpty())
+                                    return false;
                                 move.to = player;
                                 move.to_place = Player::PlaceEquip;
                                 room->moveCards(move, false);
@@ -957,10 +959,89 @@ public:
     }
 };
 
+SRYidaoCard::SRYidaoCard(){
+
+}
+
+bool SRYidaoCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    return targets.isEmpty() && to_select->getHp() <= Self->getHp();
+}
+
+void SRYidaoCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    int maxCard = 0;
+    foreach(ServerPlayer *p, room->getAlivePlayers()){
+        if(p->getHandcardNum() > maxCard)
+            maxCard = p->getHandcardNum();
+    }
+    QList<ServerPlayer *>dests;
+    foreach (ServerPlayer *p, room->getAlivePlayers()) {
+        if(p->getHandcardNum() == maxCard)
+            dests << p;
+    }
+    ServerPlayer *dest, *target = targets.first();
+    if(dests.length() == 1)
+        dest = dests.first();
+    else
+        dest = room->askForPlayerChosen(target ,dests, "sryidao");
+    CardsMoveStruct move;
+    move.to = target;
+    move.to_place = Player::PlaceHand;
+    QList<int>to_get = dest->handCards().mid(0, maxCard/2);
+    move.card_ids = to_get;
+    CardMoveReason reason(CardMoveReason::S_REASON_GIVE, dest->objectName());
+    move.reason = reason;
+    room->moveCards(move, false);
+    if(move.card_ids.length() > 2)
+        source->turnOver();
+}
+
+class SRYidao: public ZeroCardViewAsSkill{
+public:
+    SRYidao():ZeroCardViewAsSkill("sryidao"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return !player->hasUsed("SRYidaoCard");
+    }
+
+    virtual const Card *viewAs() const{
+        return new SRYidaoCard;
+    }
+};
+
+class SRQingdeng: public TriggerSkill{
+public:
+    SRQingdeng():TriggerSkill("srqingdeng"){
+        events << EventPhaseChanging;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target->isAlive();
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        PhaseChangeStruct change = data.value<PhaseChangeStruct>();
+        if(change.to != Player::NotActive)
+            return false;
+        ServerPlayer *source = player->getNext();// This may cause bug with extra turns.
+        if(!source->isAlive() && source->hasSkill(objectName())){
+            ServerPlayer *dest = room->askForPlayerChosen(source, room->getAlivePlayers(), objectName());
+            LogMessage log;
+            log.type = "#TriggerSkill";
+            log.from = source;
+            log.arg = objectName();
+            room->sendLog(log);
+            dest->drawCards(1);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
-    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu, *srqishuang, *splinger;
+    General *sryueru, *srsuyu, *srzixuan, *spmengli, *srxuanyu, *srlengtu, *srqishuang, *splinger, *splingsha;
 
     sryueru = new General(this, "sryueru", "wei", 4, false);
     sryueru->addSkill(new SRJie);
@@ -998,7 +1079,7 @@ SwordRainPackage::SwordRainPackage()
     srqishuang->addSkill(new SRLiangshuang);
     srqishuang->addSkill(new SRFazhen);
 
-    splinger = new General(this, "Splinger", "wei", 4, false);
+    splinger = new General(this, "splinger", "wei", 4, false);
     splinger->addSkill(new SRDoubleWeapon);
     splinger->addSkill(new SRDoubleSlash);
     splinger->addSkill(new SRWuling);
@@ -1006,10 +1087,15 @@ SwordRainPackage::SwordRainPackage()
     related_skills.insertMulti("srdoubleweapon", "#srdouble");
     related_skills.insertMulti("srwuling", "#leizhoueffect");
 
+    splingsha = new General(this, "splingsha", "wei", 3, false);
+    splingsha->addSkill(new SRYidao);
+    splingsha->addSkill(new SRQingdeng);
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
     addMetaObject<SRYuyanCard>();
+    addMetaObject<SRYidaoCard>();
 }
 
 ADD_PACKAGE(SwordRain)
