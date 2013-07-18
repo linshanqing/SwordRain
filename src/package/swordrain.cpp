@@ -1126,6 +1126,60 @@ public:
     }
 };
 
+SRFenwuCard::SRFenwuCard(){
+
+}
+
+bool SRFenwuCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    return to_select->isAlive() && to_select != Self;
+}
+
+bool SRFenwuCard::targetsFeasible(const QList<const Player *> &targets, const Player *Self) const{
+    return targets.length() == 2;
+}
+
+void SRFenwuCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    ServerPlayer *first = targets.first(), *second = targets.last();
+    FireSlash *slash1 = new FireSlash(Card::NoSuit, 0), *slash2 = new FireSlash(Card::NoSuit, 0);
+    CardUseStruct use1, use2;
+    use1.card = slash1;
+    use1.from = first;
+    use1.to = second;
+    use2.from = second;
+    use2.card = slash2;
+    use2.to = first;
+    room->useCard(use1);
+    room->useCard(use2);
+    if(first && first->isAlive()) first->drawCards(1);
+    if(second && second->isAlive()) second->drawCards(2);
+}
+
+class SRFenwu: public ZeroCardViewAsSkill{
+public:
+    SRFenwu():ZeroCardViewAsSkill("srfenwu"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return !player->hasUsed("SRFenwuCard");
+    }
+
+    virtual const Card *viewAs() const{
+        return new SRFenwuCard;
+    }
+};
+
+class SRHuolin: public ProhibitSkill{
+public:
+    SRHuolin():ProhibitSkill("srhuolin"){
+
+    }
+
+    virtual bool isProhibited(const Player *from, const Player *to, const Card *card) const{
+        return to->hasSkill(objectName()) && (card->isKindOf("FireSlash") || card->isKindOf("FireAttack"));
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1179,7 +1233,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao;
+    General *srlixiaoyao, *FireWild;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1187,11 +1241,17 @@ SwordRainPackage::SwordRainPackage()
     srlixiaoyao->addSkill(new SRZhangjian);
     related_skills.insertMulti("srtanyun", "#srtanyun-tar");
 
+    FireWild = new General(this, "FireWild", "god", 2, true, true);
+    FireWild->setGender(General::SexLess);
+    FireWild->addSkill(new SRFenwu);
+    FireWild->addSkill(new SRHuolin);
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
     addMetaObject<SRYuyanCard>();
     addMetaObject<SRYidaoCard>();
+    addMetaObject<SRFenwuCard>();
 }
 
 ADD_PACKAGE(SwordRain)
