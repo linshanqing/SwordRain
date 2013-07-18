@@ -1038,6 +1038,94 @@ public:
     }
 };
 
+class SRTanyun: public OneCardViewAsSkill{
+public:
+    SRTanyun():OneCardViewAsSkill("srtanyun"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return !player->hasFlag("tanyun");
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return to_select->isRed();
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        TanyunSnatch *snatch = new TanyunSnatch(originalCard->getSuit(), originalCard->getNumber());
+        snatch->addSubcard(originalCard);
+        snatch->setSkillName(objectName());
+        return snatch;
+    }
+};
+
+class SRTanyunTar: public TargetModSkill{
+public:
+    SRTanyunTar():TargetModSkill("#srtanyun-tar"){
+        pattern = "Snatch";
+    }
+
+    virtual int getDistanceLimit(const Player *from, const Card *card) const{
+        if(from->hasSkill("srtanyun") && card->getSkillName() == "srtanyun")
+            return 1;
+        else
+            return 0;
+    }
+};
+
+class SRZhangjian: public TriggerSkill{
+public:
+    SRZhangjian():TriggerSkill("srzhangjian"){
+        events << CardsMoveOneTime;
+        frequency = Compulsory;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardsMoveOneTimeStar move = data.value<CardsMoveOneTimeStar>();
+        if(player->getPhase() != Player::NotActive || move->to != player)
+            return false;
+        QList<int>ids = move->card_ids;
+        Duel *duel;
+        if(ids.length() == 1){
+            Card *card = Sanguosha->getCard(id);
+            duel = new Duel(card->getSuit(), card->getNumber());
+        }else
+            duel = new Duel(Card::NoSuit, 0);
+        QList<ServerPlayer *>dests;
+        foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+            if(!player->isProhibited(p, duel))
+                dests << p;
+        }
+        QStringList choicelist;
+        choicelist << "discard";
+        if(!dests.isEmpty())
+            choicelist << "duel";
+        else;
+        QString choice = room->askForChoice(player, objectName(), choicelist.join("+"), data);
+        if(choice == "discard"){
+            delete duel;
+            CardsMoveStruct move;
+            move.card_ids = ids;
+            move.to = NULL;
+            move.to_place = Player::DiscardPile;
+            CardMoveReason reason(CardMoveReason::S_REASON_DISCARD, player->objectName());
+            move.reason = reason;
+            room->moveCards(move);
+        }else{
+            foreach(int id, ids){
+                duel->addSubcard(id);
+            }
+            CardUseStruct use;
+            use.card = duel;
+            use.from = player;
+            use.to = room->askForPlayerChosen(player, dests, objectName());
+            room->useCard(use);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1090,6 +1178,14 @@ SwordRainPackage::SwordRainPackage()
     splingsha = new General(this, "splingsha", "wei", 3, false);
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
+
+    General *srlixiaoyao;
+
+    srlixiaoyao = new General(this, "srlixiaoyao", "shu");
+    srlixiaoyao->addSkill(new SRTanyun);
+    srlixiaoyao->addSkill(new SRTanyunTar);
+    srlixiaoyao->addSkill(new SRZhangjian);
+    related_skills.insertMulti("srtanyun", "#srtanyun-tar");
 
     skills << new SRJuling;
 
