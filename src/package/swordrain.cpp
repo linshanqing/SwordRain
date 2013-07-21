@@ -1282,6 +1282,100 @@ public:
     }
 };
 
+class SRBiaoxin: public TriggerSkill{
+public:
+    SRBiaoxin():TriggerSkill("srbiaoxin"){
+        events << CardEffected;
+        frequency = Compulsory;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardEffectStruct effect = data.value<CardEffectStruct>();
+        ServerPlayer *to = effect.to;
+        if(to == NULL || !to->hasSkill(objectName()))
+            return false;
+        else;
+        const Card *card = effect.card;
+        if(card->isKindOf("Dismantlement")){
+            int to_throw = room->askForCardChosen(to, to, "hej", objectName());
+            room->throwCard(to_throw, to);
+            return true;
+        }
+        if(card->isKindOf("Snatch")){
+            int to_give = room->askForCardChosen(to, to, "hej", objectName());
+            CardMoveReason reason(CardMoveReason::S_REASON_EXTRACTION, effect.from);
+            room->moveCardTo(Sanguosha->getCard(to_give), to, effect.from, Player::PlaceHand, reason);
+            return true;
+        }
+        return false;
+    }
+};
+
+class SRBiaoxinPro: public ProhibitSkill{
+public:
+    SRBiaoxinPro():ProhibitSkill("#srbiaoxin-pro"){
+
+    }
+
+    virtual bool isProhibited(const Player *from, const Player *to, const Card *card) const{
+        return to->hasSkill("srbiaoxin") && to->isKongcheng() &&
+                (card->isKindOf("Duel") || card->isKindOf("Indulgence"));
+    }
+};
+
+class SRBiaoxinMax: public MaxCardsSkill{
+public:
+    SRBiaoxinMax():MaxCardsSkill("#srbiaoxin-max"){
+
+    }
+
+    virtual int getExtra(const Player *target) const{
+        int x = target->getEquips().length();
+        return qMin(2, x);
+    }
+};
+
+class SRChiji: public TriggerSkill{
+public:
+    SRChiji():TriggerSkill("srchiji"){
+        events << EventPhaseStart << EventPhaseChanging;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case EventPhaseChanging:{
+            PhaseChangeStruct change = data.value<PhaseChangeStruct>();
+            if(change.to == Player::Judge && !player->isSkipped(Player::Judge) && !player->isSkipped(Player::Draw)
+                    && !player->getMark("@speed") && !player->getMark("extraTurn")){
+                if(player->askForSkillInvoke(objectName(), data)){
+                    player->skip(Player::Judge);
+                    player->skip(Player::Draw);
+                    player->gainMark("@speed");
+                }
+            }
+            break;
+        }
+        case EventPhaseStart:{
+            if(player->getPhase() == Player::NotActive){
+                if(player->getMark("@speed") == 2){
+                    player->loseAllMarks("@speed");
+                    room->setPlayerMark(player, "extraTurn", 1);
+                    player->gainAnExtraTurn();
+                }
+                if(player->getMark("@speed") == 1){
+                    player->gainMark("@speed");
+                }
+                if(player->getMark("extraTurn")){
+                    room->setPlayerMark(player, "extraTurn", 0);
+                }
+            }
+            break;
+        }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1335,7 +1429,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao, *FireWild, *srcaiyi;
+    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1353,6 +1447,14 @@ SwordRainPackage::SwordRainPackage()
     srcaiyi->addSkill(new SRHuimengBack);
     srcaiyi->addSkill(new SRDielian);
     related_skills.insertMulti("srhuimeng", "#srhuimeng");
+
+    srbiaoshi = new General(this, "srbiaoshi", "qun", 3);
+    srbiaoshi->addSkill(new SRBiaoxin);
+    srbiaoshi->addSkill(new SRBiaoxinMax);
+    srbiaoshi->addSkill(new SRBiaoxinPro);
+    srbiaoshi->addSkill(new SRChiji);
+    related_skills.insertMulti("srbiaoshi", "#srbiaoxin-max");
+    related_skills.insertMulti("srbiaoxin", "#srbiaoxin-pro");
 
     skills << new SRJuling;
 
