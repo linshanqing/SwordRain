@@ -1180,6 +1180,108 @@ public:
     }
 };
 
+class SRHuimeng: public TriggerSkill{
+public:
+    SRHuimeng():TriggerSkill("srhuimeng"){
+        frequency = Compulsory;
+        events << EventPhaseStart << EventPhaseEnd;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        if(player->getPhase() != Player::Play)
+            return false;
+        switch(event){
+        case EventPhaseStart:{
+            QList<Player::Place>places;
+            QList<ServerPlayer *>players;
+            for(int i = 1; i <= 160; i++){
+                places[i] = room->getCardPlace(i);
+                players[i] = room->getCardOwner(i);
+            }
+            room->setTag("HuimengPlace", QVariant::fromValue(places));
+            room->setTag("HuimengPlayer", QVariant::fromValue(players));
+            break;
+        }
+        case EventPhaseEnd:{
+            QList<Player::Place>places;
+            QList<ServerPlayer *>players;
+            QVariantList places_data = room->getTag("HuimengPlace").toList();
+            QVariantList player_data = room->getTag("HuimengPlayer").toList();
+            room->removeTag("HuimengPlace");
+            room->removeTag("HuimengPlayer");
+            for(int i = 1; i <= 160; i++){
+                places[i] = places_data[i].value<Player::Place>();
+                players[i] = player_data[i].value<ServerPlayer *>();
+                room->moveCardTo(Sanguosha->getCard(i), players[i], places[i], , true);
+            }
+            break;
+        }
+        default: break;
+        }
+        return false;
+    }
+};
+
+class SRHuimengBack: public TriggerSkill{
+public:
+    SRHuimengBack():TriggerSkill("#srhuimeng"){
+        frequency = Compulsory;
+        events << CardsMoving << BeforeCardsMove;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardsMoveOneTimeStar move = data.value<CardsMoveOneTimeStar>();
+        if(move->from != player || !move->from_places.contains(Player::PlaceHand))
+            return false;
+
+        switch(event){
+        case BeforeCardsMove:{
+            int x = 0;
+            foreach(int id, move->card_ids){
+                Card *card = Sanguosha->getCard(id);
+                if((card->isKindOf("DelayedTrick") || card->isKindOf("DefensiveHorse")) && room->getCardPlace(id) == Player::PlaceHand)
+                    x ++;
+            }
+            room->setPlayerMark(player, "huimeng", x);
+            break;
+        }
+        case CardsMoving:{
+            if(player->getMark("huimeng"))
+                player->drawCards(player->getMark("huimeng"));
+            break;
+        }
+        default: break;
+        }
+        return false;
+    }
+};
+
+class SRDielian: public TriggerSkill{
+public:
+    SRDielian():TriggerSkill("srdielian"){
+        events << Dying;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DyingStruct dying = data.value<DyingStruct>();
+        if(dying.who == player || !player->hasSkill(objectName()))
+            return false;
+
+        if(player->askForSkillInvoke(objectName(), data)){
+            int hp = player->getHp();
+            room->killPlayer(player);
+            int maxhp = dying.who->getMaxHp();
+            room->setPlayerProperty(dying.who, "maxhp", QVariant(maxhp+1));
+            RecoverStruct recover;
+            recover.who = NULL;
+            recover.recover = hp + 1;
+            room->recover(dying.who, recover);
+            dying.who->drawCards(hp);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1233,7 +1335,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao, *FireWild;
+    General *srlixiaoyao, *FireWild, *srcaiyi;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1245,6 +1347,12 @@ SwordRainPackage::SwordRainPackage()
     FireWild->setGender(General::SexLess);
     FireWild->addSkill(new SRFenwu);
     FireWild->addSkill(new SRHuolin);
+
+    srcaiyi = new General(this, "srcaiyi", "wu", 3, false);
+    srcaiyi->addSkill(new SRHuimeng);
+    srcaiyi->addSkill(new SRHuimengBack);
+    srcaiyi->addSkill(new SRDielian);
+    related_skills.insertMulti("srhuimeng", "#srhuimeng");
 
     skills << new SRJuling;
 
