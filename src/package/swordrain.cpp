@@ -1376,6 +1376,99 @@ public:
     }
 };
 
+class SRSheshen: public TriggerSkill{
+public:
+    SRSheshen():TriggerSkill("srsheshen"){
+        events << Dying;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DyingStruct dying = data.value<DyingStruct>();
+        ServerPlayer *who = dying.who;
+        if(who != player && player->askForSkillInvoke(objectName(), data)){
+            room->loseHp(player);
+            RecoverStruct reco;
+            reco.who = player;
+            room->recover(who, roco);
+        }
+        return false;
+    }
+};
+
+class SRJianjue: public TriggerSkill{
+public:
+    SRJianjue():TriggerSkill("srjianjue"){
+        events << CardsMoveOneTime << SlashProceed << AfterDrawNCards << EventPhaseEnd;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case CardsMoveOneTime:{
+            CardsMoveOneTimeStar moveOneTime = data.value<CardsMoveOneTimeStar>();
+            if(moveOneTime->to == NULL) return false;
+            if(moveOneTime->to == player && player->getPhase() == Player::Draw && moveOneTime->to_place == Player::PlaceHand){
+                foreach(int id, moveOneTime->card_ids){
+                    Card *card = Sanguosha->getCard(id);
+                    card->setFlags("jianjueDraw");
+                }
+            }
+            break;
+        }
+        case AfterDrawNCards:{
+            if(player->askForSkillInvoke(objectName(), data)){
+                QList<const Card *>handCards = player->getHandcards();
+                player->addMark("JianjueInvoked");
+                foreach(const Card *cd, handCards){
+                    if(cd->hasFlag("jianjueDraw"))
+                        room->showCard(player, cd->getEffectiveId());
+                }
+            }
+            break;
+        }
+        case SlashProceed:{
+            SlashEffectStruct effect = data.value<SlashEffectStruct>();
+            if(!effect.from->hasSkill(objectName()) || !effect.from->getMark("JianjueInvoked")) return false;
+            const Card *slash = room->askForCard(effect.to, "slash", "@jianjue-slash", data, Card::MethodResponse, effect.from);
+            room->slashResult(effect, slash);
+            return true;
+            break;
+        }
+        case EventPhaseEnd:{
+            if(player->getPhase() == Player::Finish){
+                if(player->getMark("JianjueInvoked"))
+                    room->setPlayerMark(player, "JianjueInvoked", 0);
+                foreach(const Card *cd, player->getHandcards()){
+                    if(cd->hasFlag("jianjueDraw"))
+                        cd->setFlags("-jianjueDraw");
+                }
+            }
+            break;
+        }
+        default: break;
+        }
+        return false;
+    }
+};
+
+class JianjueFilter: public FilterSkill{
+public:
+    JianjueFilter():FilterSkill("#jianjue-filter"){
+        frequency = NotFrequent;
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return !to_select->isEquipped() && to_select->hasFlag("jianjueDraw") && Self->getMark("JianjueInvoked");
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        Slash *slash = new Slash(originalCard->getSuit(), originalCard->getNumber());
+        slash->setSkillName("srjianjue");
+        WrappedCard *card = Sanguosha->getWrappedCard(originalCard->getId());
+        card->takeOver(slash);
+        return card;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1429,7 +1522,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi;
+    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1455,6 +1548,12 @@ SwordRainPackage::SwordRainPackage()
     srbiaoshi->addSkill(new SRChiji);
     related_skills.insertMulti("srbiaoshi", "#srbiaoxin-max");
     related_skills.insertMulti("srbiaoxin", "#srbiaoxin-pro");
+
+    spyueru = new General(this, "spyueru", "qun", 4, false);
+    spyueru->addSkill(new SRSheshen);
+    spyueru->addSkill(new SRJianjue);
+    spyueru->addSkill(new JianjueFilter);
+    related_skills.insertMulti("srjianjue", "#jianjue-filter");
 
     skills << new SRJuling;
 
