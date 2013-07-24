@@ -1469,6 +1469,132 @@ public:
     }
 };
 
+class SRLiubi: public TriggerSkill{
+public:
+    SRLiubi():TriggerSkill("srliubi"){
+        events << Damage << CardUsed << Damaged << TurnedOver << SlashMissed << CardResponded << CardEffected;
+        frequency = Compulsory;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case Damage:{
+            if(!player->hasSkill("lianhuan")){
+                DamageStruct dama = data.value<DamageStruct>();
+                if(dama.to && player->distanceTo(dama.to) > 1)
+                    player->gainMark("lianhuan");
+                if(player->getMark("lianhuan") > 1){
+                    room->acquireSkill(player, "lianhuan");
+                    player->drawCards(2);
+                }
+            }
+            break;
+        }
+        case CardUsed:{
+            if(!player->hasSkill("qiangxi")){
+                CardUseStruct use = data.value<CardUseStruct>();
+                if(use.card->isKindOf("Slash"))
+                    player->gainMark("qiangxi");
+                if(player->getMark("qiangxi") > 4){
+                    room->acquireSkill(player, "qiangxi");
+                    player->drawCards(2);
+                }
+            }
+            break;
+        }
+        case CardResponded:{
+            if(!player->hasSkill("qiangxi")){
+                ResponsedStruct res = data.value<ResponsedStruct>();
+                if(res.m_card->isKindOf("Slash"))
+                    player->gainMark("qiangxi");
+                if(player->getMark("qiangxi") > 4){
+                    room->acquireSkill(player, "qiangxi");
+                    player->drawCards(2);
+                }
+            }
+            break;
+        }
+        case Damaged:{
+            if(!player->hasSkill("ganglie")){
+                player->gainMark("ganglie");
+            }
+            if(player->getMark("ganglie") > 2){
+                room->acquireSkill(player, "ganglie");
+                player->drawCards(2);
+            }
+            break;
+        }
+        case TurnedOver:{
+            if(!player->hasSkill("jushou")){
+                room->acquireSkill(player, "jushou");
+                player->drawCards(2);
+            }
+            break;
+        }
+        case CardEffected:{
+            CardEffectStruct effect = data.value<CardEffectStruct>();
+            if(!player->hasSkill("longdan") && effect.to == player){
+                const Card *card = effect.card;
+                if(card->isKindOf("AOE") || card->isKindOf("Slash") || card->isKindOf("Duel") || card->isKindOf("FireAttack"))
+                    player->gainMark("longdan");
+                if(player->getMark("longdan") > 5){
+                    room->acquireSkill(player, "longdan");
+                    player->drawCards(2);
+                }
+            }
+            break;
+        }
+        case SlashMissed:{
+            if(!player->hasSkill("shenwei")){
+                player->gainMark("shenwei");
+                if(player->getMark("shenwei") > 3){
+                    room->acquireSkill(player, "shenwei");
+                    player->drawCards(2);
+                }
+            }
+            break;
+        }
+        default: break;
+        }
+        return false;
+    }
+};
+
+class SRShishou: public PhaseChangeSkill{
+public:
+    SRShishou():PhaseChangeSkill("srshishou"){
+        frequency = Compulsory;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        if(player->getPhase() != Player::Start)
+            return false;
+        int x = 0;
+        if(player->hasSkill("longdan"))
+            x ++;
+        if(player->hasSkill("jushou"))
+            x ++;
+        if(player->hasSkill("shenwei"))
+            x ++;
+        if(player->hasSkill("ganglie"))
+            x ++;
+        if(player->hasSkill("qiangxi"))
+            x ++;
+        if(player->hasSkill("lianhuan"))
+            x ++;
+
+        if(x >= 3 && !player->getMark("ShishouLost")){
+            room->loseMaxHp(player);
+            room->setPlayerMark(player, "ShishouLost", 1);
+        }
+        if(x >= 4){
+            room->detachSkillFromPlayer(player, "srliubi");
+            room->detachSkillFromPlayer(player, "srshishou");
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1522,7 +1648,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru;
+    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru, *zhenyumingwang;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1554,6 +1680,10 @@ SwordRainPackage::SwordRainPackage()
     spyueru->addSkill(new SRJianjue);
     spyueru->addSkill(new JianjueFilter);
     related_skills.insertMulti("srjianjue", "#jianjue-filter");
+
+    zhenyumingwang = new General(this, "zhenyumingwang", "god");
+    zhenyumingwang->addSkill(new SRLiubi);
+    zhenyumingwang->addSkill(new SRShishou);
 
     skills << new SRJuling;
 
