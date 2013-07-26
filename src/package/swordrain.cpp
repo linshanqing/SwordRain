@@ -1595,6 +1595,122 @@ public:
     }
 };
 
+SRMiyinCard::SRMiyinCard(){
+
+}
+
+bool SRMiyinCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    return targets.isEmpty() && to_select != Self && !to_select->getMark("@huimeng");
+}
+
+void SRMiyinCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    targets.first()->obtainCard(this);
+    targets.first()->gainMark("@huimeng");
+}
+
+class SRMiyinView: public OneCardViewAsSkill{
+public:
+    SRMiyinView():OneCardViewAsSkill("miyin"){
+
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return to_select->getSuit() == Card::Diamond && !to_select->isEquipped();
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        SRMiyinCard *card = new SRMiyinCard;
+        card->addSubcard(originalCard);
+        card->setSkillName(objectName());
+        return card;
+    }
+};
+
+class SRMiyin: public TriggerSkill{
+public:
+    SRMiyin():TriggerSkill("srmiyin"){
+        events << EventPhaseStart;
+    }
+
+    virtual int getPriority() const{
+        return 4;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->getMark("@huimeng");
+    }
+
+    virtual bool trigger(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(player->getPhase()){
+        case Player::Start:{
+            QList<const Skill *>skills = player->getVisibleSkillList();
+            QStringList skillnames;
+            foreach(const Skill *skill, skills){
+                skillnames << skill->objectName();
+                room->detachSkillFromPlayer(player, skill->objectName());
+            }
+            room->setTag("Removedskills"+player->objectName(), QVariant(skillnames));
+            break;
+        }
+        case Player::Finish:{
+            QStringList skillnames = room->getTag("Removedskills"+player->objectName()).toStringList();
+            foreach (QString skillname, skillnames) {
+                room->attachSkillToPlayer(player, skillname);
+            }
+            player->loseAllMarks("@huimeng");
+            room->removeTag("Removedskills"+player->objectName());
+            break;
+        }
+        default: return false;
+        }
+        return false;
+    }
+};
+
+SRZhaohuanCard::SRZhaohuanCard(){
+    target_fixed = true;
+}
+
+void SRZhaohuanCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    QList<ServerPlayer *>targets_choose;
+    foreach(ServerPlayer *p, room->getAllPlayers(true)){
+        if(!p->isAlive())
+            targets_choose << p;
+    }
+
+    ServerPlayer *target = room->askForPlayerChosen(source, targets_choose, "srzhaohuan");
+    source->loseMark("@zhaohuan");
+    room->revivePlayer(target);
+    room->changeHero(target, "FireWild", true);
+    target->drawCards(2);
+    if(source->getRole() == "lord")
+        room->setPlayerProperty(target, "role", QVariant("loyalist"));
+    else
+        room->setPlayerProperty(target, "role", QVariant(source->getRole()));
+    room->setPlayerProperty(target, "kingdom", QVariant(source->getKingdom()));
+}
+
+class SRZhaohuan: public ZeroCardViewAsSkill{
+public:
+    SRZhaohuan():ZeroCardViewAsSkill("srzhaohuan"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        if(!player->getMark("@zhaohuan"))
+            return false;
+        foreach(const Player *p, player->getSiblings()){
+            if(!p->isAlive())
+                return true;
+        }
+        return false;
+    }
+
+    virtual const Card *viewAs() const{
+        return new SRZhaohuanCard;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1648,7 +1764,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru, *zhenyumingwang;
+    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru, *zhenyumingwang, *sranu;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1685,12 +1801,19 @@ SwordRainPackage::SwordRainPackage()
     zhenyumingwang->addSkill(new SRLiubi);
     zhenyumingwang->addSkill(new SRShishou);
 
+    sranu = new General(this, "anu", "wu", 3, false, true);
+    sranu->addSkill(new SRMiyin);
+    sranu->addSkill(new SRZhaohuan);
+    sranu->addSkill(new MarkAssignSkill("@zhaohuan", 1));
+    related_skills.insertMulti("srzhaohuan", "#@zhaohuan-1");
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
     addMetaObject<SRYuyanCard>();
     addMetaObject<SRYidaoCard>();
     addMetaObject<SRFenwuCard>();
+    addMetaObject<SRMiyinCard>();
 }
 
 ADD_PACKAGE(SwordRain)
