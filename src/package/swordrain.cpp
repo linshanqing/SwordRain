@@ -1711,6 +1711,85 @@ public:
     }
 };
 
+class SRZhuansheng: public TriggerSkill{
+public:
+    SRZhuansheng():TriggerSkill("srzhuansheng"){
+        events << Damaged;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->isAlive();
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DamageStar dama = data.value<DamageStar>();
+        const Card *card = dama->card;
+        ServerPlayer *who = room->findPlayerBySkillName(objectName());
+        if(dama->from == NULL || dama->from == who || card == NULL || !card->isKindOf("Slash")) return false;
+        if(who->faceUp() &&  who->askForSkillInvoke(objectName())){
+            int hp = who->getHp();
+            room->setTag("hpTarget", QVariant(hp));
+            who->turnOver();
+            dama->from->turnOver();
+            who->addMark("zhuan");
+        }
+        return false;
+    }
+};
+
+class SRZhuanshengTri: public TriggerSkill{
+public:
+    SRZhuanshengTri(): TriggerSkill("#zhuansheng-tri"){
+        events << TurnedOver;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        if(player->getMark("zhuan") && player->faceUp()){
+            int hp = room->getTag("hpTarget").toInt();
+            room->removeTag("hpTarget");
+            if(player->getHp() < hp){
+                LogMessage log;
+                log.type = "#ZhuanshengEffect";
+                log.from = player;
+                room->sendLog(log);
+                player->drawCards(hp);
+            }
+            room->setPlayerMark(player, "zhuan", 0);
+        }
+        return false;
+    }
+};
+
+class SRZhuanshengDis: public DistanceSkill{
+public:
+    SRZhuanshengDis():DistanceSkill("#zhuansheng-dis"){
+
+    }
+
+    virtual int getCorrect(const Player *from, const Player *to) const{
+        return (to->hasSkill("srzhuansheng") && !to->faceUp() && from->getHandcardNum() > to->getHandcardNum())?1:0;
+    }
+};
+
+class SRBilu: public TriggerSkill{
+public:
+    SRBilu():TriggerSkill("srbilu"){
+        events << HpRecover;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        RecoverStruct reco = data.value<RecoverStruct>();
+        for(int i = 0; i < reco.recover; i ++){
+            if(!player->askForSkillInvoke(objectName()))
+                break;
+            ServerPlayer *target = room->askForPlayerChosen(player, room->getAlivePlayers(), objectName());
+            int x = (player->getHp() < 1)?3:2;// this may cause bug with skills such as Buqu and NosBuqu
+            target->drawCards(x);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1764,7 +1843,7 @@ SwordRainPackage::SwordRainPackage()
     splingsha->addSkill(new SRYidao);
     splingsha->addSkill(new SRQingdeng);
 
-    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru, *zhenyumingwang, *sranu;
+    General *srlixiaoyao, *FireWild, *srcaiyi, *srbiaoshi, *spyueru, *zhenyumingwang, *sranu, *srxiyao;
 
     srlixiaoyao = new General(this, "srlixiaoyao", "shu");
     srlixiaoyao->addSkill(new SRTanyun);
@@ -1806,6 +1885,14 @@ SwordRainPackage::SwordRainPackage()
     sranu->addSkill(new SRZhaohuan);
     sranu->addSkill(new MarkAssignSkill("@zhaohuan", 1));
     related_skills.insertMulti("srzhaohuan", "#@zhaohuan-1");
+
+    srxiyao = new General(this, "srxiyao", "wei", 3, false);
+    srxiyao->addSkill(new SRZhuansheng);
+    srxiyao->addSkill(new SRZhuanshengDis);
+    srxiyao->addSkill(new SRZhuanshengTri);
+    srxiyao->addSkill(new SRBilu);
+    related_skills.insertMulti("srzhuansheng", "#zhuansheng-tri");
+    related_skills.insertMulti("srzhuansheng", "#zhuansheng-dis");
 
     skills << new SRJuling;
 
