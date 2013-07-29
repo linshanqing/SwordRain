@@ -1790,6 +1790,184 @@ public:
     }
 };
 
+class SRZongyuan: public DistanceSkill{
+public:
+    SRZongyuan():DistanceSkill("srzongyuan"){
+
+    }
+
+    virtual int getCorrect(const Player *from, const Player *to) const{
+        if(from->hasSkill(objectName()) && from->inMyAttackRange(to))
+            return -99;
+        else
+            return 0;
+    }
+};
+
+class SRKeyin: public TriggerSkill{
+public:
+    SRKeyin():TriggerSkill("srkeyin"){
+        events << SlashMissed;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        SlashEffectStruct effect = data.value<SlashEffectStruct>();
+        const Slash *slash = effect.slash;
+        QList<ServerPlayer *>targets;
+        foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+            if(player->inMyAttackRange(p) && !player->isProhibited(p, slash) && p != effect.to)
+                targets << p;//the skill card used in lua skill can be used to someone who is prohibited.
+        }
+        if(!targets.isEmpty() && player->askForSkillInvoke(objectName(), data)){
+            ServerPlayer *to = room->askForPlayerChosen(player, targets, objectName());
+            CardUseStruct use;
+            use.from = player;
+            use.to << to;
+            use.card = slash;
+            room->useCard(use);
+        }
+        return false;
+    }
+};
+
+class SRXishi: public MasochismSkill{
+public:
+    SRXishi():MasochismSkill("srxishi"){
+        frequency = Compulsory;
+    }
+
+    virtual void onDamaged(ServerPlayer *target, const DamageStruct &damage) const{
+        if(target->isKongcheng()) return false;
+        Room *room = target->getRoom();
+        int total = 0, count = 0;
+        QList<int>card_ids;
+        foreach(ServerPlayer *p, room->getAlivePlayers()){
+            if(!p->isKongcheng()){
+                const Card *card = room->askForExchange(p, objectName(), 1, false, "@srxishi", false);
+                CardMoveReason reason(CardMoveReason::S_REASON_RESPONSE, p->objectName());
+                room->moveCardTo(card, NULL, Player::PlaceTable, reason, true);
+                LogMessage log;
+                log.from = p;
+                log.arg = card->getNumberString();
+                log.type = "#respond";
+                room->sendLog(log);
+                total += card->getNumber();
+                count ++;
+                card_ids << card->getEffectiveId();
+                if(total > 21){
+                    LogMessage log;
+                    log.from = p;
+                    log.type = "#damage";
+                    log.arg = sum;
+                    room->sendLog(log);
+                    room->loseHp(p);
+                    CardsMoveStruct move;
+                    move.card_ids = card_ids;
+                    move.to_place = Player::DiscardPile;
+                    room->moveCardsAtomic(move, true);
+                    if(damage.from && damage.from != player && !damage.from->isNude()){
+                        LogMessage log;
+                        log.from = p;
+                        log.type = "#obtain";
+                        room->sendLog(log);
+                        int id = room->askForCardChosen(p, damage.from, "he", objectName());
+                        room->obtainCard(p, id, room->getCardPlace(id) == Player::PlaceEquip);
+                    }
+                    return false;
+                }
+                if(total == 21){
+                    p->drawCards(count);
+                    target->drawCards(count);
+                    CardsMoveStruct move;
+                    move.card_ids = card_ids;
+                    move.to_place = Player::DiscardPile;
+                    room->moveCardsAtomic(move, true);
+                    return false;
+                }
+            }
+        }
+        if(count > 2) count = 2;
+        QList<int>to_get;
+        for(int i = 0; i < count; i ++){
+            room->fillAG(card_ids, target);
+            int id = room->askForAG(target, card_ids, false, objectName());
+            target->invoke("clearAG");
+            to_get << id;
+            card_ids.removeOne(id);
+        }
+        CardsMoveStruct get, thr;
+        get.card_ids = to_get;
+        thr.card_ids = card_ids;
+        CardMoveReason reason(CardMoveReason::S_REASON_GOTBACK, target->objectName());
+        get.reason = reason;
+        get.to = target;
+        get.to_place = Player::PlaceHand;
+        thr.to_place = Player::DiscardPile;
+        QList<CardsMoveStruct> moves;
+        moves.push_back(get);
+        moves.push_back(thr);
+        room->moveCardsAtomic(move, true);
+        return false;
+    }
+};
+
+class SRZizhu: public TriggerSkill{
+public:
+    SRZizhu():TriggerSkill("srzizhu"){
+        events << EventPhaseStart;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(player->getPhase()){
+        case Player::Start:{
+            int hcn = player->getHandcardNum();
+            bool jishu = (hcn%2)?true:false;
+            QList<ServerPlayer *>targets;
+            foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+                bool ji = ((p->getHandcardNum())%2)?true:false;
+                if(ji != jishu && p->getHandcardNum() > hcn)
+                    targets << p;
+            }
+            if(!targets.isEmpty() && player->askForSkillInvoke(objectName())){
+                room->broadcastSkillInvoke(objectName(), 1);
+                ServerPlayer *target = room->askForPlayerChosen(player, targets, objectName());
+                room->setPlayerMark(player, "threeInvoke", hcn + 1);
+                int drawNum = target->getHandcardNum() - hcn;
+                player->drawCards(drawNum);
+                if(drawNum > 3)
+                    player->skip(Player::Draw);
+            }
+            break;
+        }
+        case Player::Finish:{
+            if(player->getMark("threeInvoke") > 0){
+                int hc = player->getMark("threeInvoke") - 1;
+                int nhc = player->getHandcardNum();
+                int y = qAbs(hc - nhc);
+                room->setPlayerMark(player, "threeInvoke", 0);
+                if(y%2 == 1){
+                    LogMessage log;
+                    log.type = "#TriggerSkill";
+                    log.from = player;
+                    log.arg = objectName();
+                    room->sendLog(log);
+                    if(nhc == 0){
+                        room->broadcastSkillInvoke(objectName(), 2);
+                        room->loseHp(player);
+                    }else{
+                        room->broadcastSkillInvoke(objectName(), 3);
+                        room->askForDiscard(player, objectName(), 1, 1);
+                    }
+                }
+            }
+            break;
+        }
+        default: return false;
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -1893,6 +2071,16 @@ SwordRainPackage::SwordRainPackage()
     srxiyao->addSkill(new SRBilu);
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-tri");
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-dis");
+
+    General *srchonglou, *srjingtian;
+
+    srchonglou = new General(this, "srchonglou", "god");
+    srchonglou->addSkill(new SRZongyuan);
+    srchonglou->addSkill(new SRKeyin);
+
+    srjingtian = new General(this, "srjingtian", "wu");
+    srjingtian->addSkill(new SRXishi);
+    srjingtian->addSkill(new SRZizhu);
 
     skills << new SRJuling;
 
