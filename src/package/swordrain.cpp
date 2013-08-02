@@ -2109,6 +2109,79 @@ public:
     }
 };
 
+class SRHaoyong: public TriggerSkill{
+public:
+    SRHaoyong():TriggerSkill("srhaoyong"){
+        events << SlashEffect;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        SlashEffectStruct effect = data.value<SlashEffectStruct>();
+        ServerPlayer *who = room->findPlayerBySkillName(objectName());
+        if(player->getPhase() == Player::Play && !player->hasUsed("Analeptic") && who && effect.to != who &&
+                !who->isNude()){
+            if(!effect.slash->hasFlag("drank")){
+                QVariant ai_data;
+                ai_data.setValue(effect.to);
+                if(room->askForSkillInvoke(who, objectName(), ai_data)){
+                    if(room->askForCard(who, "slash,Weapon", "@jiajiu")){
+                        effect.slash->setFlags("drank");
+                    }
+                }
+            }
+        }
+        return false;
+    }
+};
+
+class SRZhige: public TriggerSkill{
+public:
+    SRZhige():TriggerSkill("srzhige"){
+        frequency = Wake;
+        events << Death;
+    }
+
+    virtual int getPriority() const{
+        return 2;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DeathStruct death = data.value<DeathStruct>();
+        ServerPlayer *source = room->findPlayerBySkillName(objectName());
+        if(source = death.who) return false;
+        QString kingdom = death.who->getKingdom();
+        bool can = true;
+        foreach(ServerPlayer *p, room->getAlivePlayers()){
+            if(p->getKingdom() == kingdom){
+                can = false;
+                break;
+            }
+        }
+        if(can){
+            if(source->isAlive() && !source->getMark("zhige")){
+                source->gainMark("@waked");
+                room->setPlayerMark(source, "zhige", 1);
+                if(!source->getEquips().isEmpty()){
+                    int x = source->getEquips().length();
+                    player->drawCards(x);
+                    CardsMoveStruct move;
+                    move.to_place = Player::DiscardPile;
+                    foreach(const Card *cd, source->getEquips())
+                        move.card_ids << cd->getEffectiveId();
+                    CardMoveReason reason(CardMoveReason::S_REASON_THROW, source->objectName());
+                    room->moveCards(move, true);
+                }
+                room->acquireSkill(source, "yuanxing");//this need to be changed according to others code
+            }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2213,7 +2286,7 @@ SwordRainPackage::SwordRainPackage()
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-tri");
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-dis");
 
-    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange;
+    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange, *srwenhui;
 
     srchonglou = new General(this, "srchonglou", "god");
     srchonglou->addSkill(new SRZongyuan);
@@ -2231,6 +2304,11 @@ SwordRainPackage::SwordRainPackage()
     srleiyuange->addSkill(new SRGuifu);
     srleiyuange->addSkill(new MarkAssignSkill("@zuzhou", 1));
     related_skills.insertMulti("srguifu", "#@zuzhou-1");
+
+    srwenhui = new General(this, "srwenhui", "shu", 4, false);
+    srwenhui->addSkill(new SRHaoyong);
+    srwenhui->addSkill(new SRZhige);
+    //srwenhui->addRelateSkill("yuanxing");//this also need to change according to other's codes
 
     skills << new SRJuling;
 
