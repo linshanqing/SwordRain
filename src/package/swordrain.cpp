@@ -1968,6 +1968,147 @@ public:
     }
 };
 
+class SRChuanyun: public TriggerSkill{
+public:
+    SRChuanyun():TriggerSkill("srchuanyun"){
+        events << DamageCaused;
+    }
+
+    virtual bool trigger(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+        DamageStar dama = data.value<DamageStar>();
+        ServerPlayer *to = dama->to;
+        if(dama->chain || dama->transfer || dama->card == NULL || !dama->card->isKindOf("Slash")) return false;
+        QList<ServerPlayer *>targets;
+        foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+            if(!p->isNude() && p != to)
+                targets << p;
+        }
+        room->setTag("CYvictim", QVariant(to));
+        if(!targets.isEmpty() && player->askForSkillInvoke(objectName())){
+            ServerPlayer *target = room->askForPlayerChosen(player, targets, objectName());
+            if(player->inMyAttackRange(target)  && to->inMyAttackRange(target)){
+                room->broadcastSkillInvoke(objectName(), 1);
+                room->askForDiscard(target, objectName(), qMin(2, target->getCardCount(true)),
+                                    qMin(2, target->getCardCount(true)), false, true);
+            }else{
+                room->broadcastSkillInvoke(objectName(), 2);
+                room->askForDiscard(target, objectName(), qMin(2, target->getCardCount(true)),
+                                    qMin(2, target->getCardCount(true)), false, true);
+                return true;
+            }
+        }
+        room->removeTag("CYvictim");
+        return false;
+    }
+};
+
+class SRJianyan: public TriggerSkill{
+public:
+    SRJianyan():TriggerSkill("srjianyan"){
+        events << EventPhaseStart;
+    }
+
+    virtual bool trigger(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+        if(player->getPhase() != Player::Discard) return false;
+        if(player->getHandcardNum() > player->getMaxCards() && player->askForSkillInvoke(objectName())){
+            room->showAllCards(player);
+            QList<const Card *>allCards = player->getHandcards();
+            QList<int>to_dis;
+            foreach(const Card *cd, allCards){
+                if(cd->isRed())
+                    to_dis << cd->getEffectiveId();
+            }
+            if(to_dis.length() > player->getMaxCards()){
+                int dis_num = to_dis.length() - player->getMaxCards();
+                for(int i = 0; i < dis_num; i ++){
+                    room->fillAG(to_dis, player);
+                    int dis = room->askForAG(player, to_dis, false, objectName());
+                    to_dis.removeOne(dis);
+                    room->throwCard(dis, player);
+                    player->invoke("clearAG");
+                }
+                return true;
+            }else
+                return true;
+        }
+        return false;
+    }
+};
+
+SRGuifuCard::SRGuifuCard(){
+
+}
+
+bool SRGuifuCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    return targets.isEmpty();
+}
+
+void SRGuifuCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    source->loseMark("@zuzhou");
+    ServerPlayer *dest = targets.first();
+    dest->gainMark("@curse");
+    room->loseHp(dest);
+    room->broadcastInvoke("animate", "lightbox:$AyGuiFu");
+}
+
+class SRGuifuView: public ViewAsSkill{
+public:
+    SRGuifuView():ViewAsSkill("srguifu"){
+
+    }
+
+    virtual bool viewFilter(const QList<const Card *> &selected, const Card *to_select) const{
+        if(selected.isEmpty())
+            return true;
+        if(selected.length() == 1)
+            return to_select->getSuit() == selected.first()->getSuit();
+        return false;
+    }
+
+    virtual const Card *viewAs(const QList<const Card *> &cards) const{
+        if(cards.length() < 2)
+            return NULL;
+        SRGuifuCard *card = new SRGuifuCard;
+        card->addSubcards(cards);
+        card->setSkillName(objectName());
+        return card;
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return player->getMark("@zuzhou") && player->getCardCount(true) >= 2;
+    }
+};
+
+class SRGuifu: public TriggerSkill{
+public:
+    SRGuifu():TriggerSkill("srguifu"){
+        events << TurnStart;
+        view_as_skill = new SRGuifuView;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->isAlive() && target->getMark("@curse");
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        JudgeStruct judge;
+        judge.who = player;
+        judge.pattern = QRegExp("(.*):(spade):([2-9])");
+        judge.reason = objectName();
+        judge.play_animation = true;
+        judge.good = false;
+        if(judge.isBad()){
+            int hp = player->getHp();
+            if(hp > 0){
+                room->loseHp(player, hp);
+                player->drawCards(hp);
+            }
+            player->loseAllMarks("@curse");
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2072,7 +2213,7 @@ SwordRainPackage::SwordRainPackage()
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-tri");
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-dis");
 
-    General *srchonglou, *srjingtian;
+    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange;
 
     srchonglou = new General(this, "srchonglou", "god");
     srchonglou->addSkill(new SRZongyuan);
@@ -2082,6 +2223,15 @@ SwordRainPackage::SwordRainPackage()
     srjingtian->addSkill(new SRXishi);
     srjingtian->addSkill(new SRZizhu);
 
+    srwangxiaohu = new General(this, "srwangxiaohu", "wu", 4, true, true);
+    srwangxiaohu->addSkill(new SRChuanyun);
+
+    srleiyuange = new General(this, "srleiyuange", "wu");
+    srleiyuange->addSkill(new SRJianyan);
+    srleiyuange->addSkill(new SRGuifu);
+    srleiyuange->addSkill(new MarkAssignSkill("@zuzhou", 1));
+    related_skills.insertMulti("srguifu", "#@zuzhou-1");
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
@@ -2089,6 +2239,7 @@ SwordRainPackage::SwordRainPackage()
     addMetaObject<SRYidaoCard>();
     addMetaObject<SRFenwuCard>();
     addMetaObject<SRMiyinCard>();
+    addMetaObject<SRGuifuCard>();
 }
 
 ADD_PACKAGE(SwordRain)
