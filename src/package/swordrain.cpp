@@ -2349,6 +2349,92 @@ public:
     }
 };
 
+class SRYuxue: public TriggerSkill{
+public:
+    SRYuxue():TriggerSkill("sryuxue"){
+        events << Damaged << Dying;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case Damaged:{
+            DamageStar dama = data.value<DamageStar>();
+            if(!dama->from || dama->from->isDead()) return false;
+            Slash *slash = new Slash(Card::NoSuit, 0);
+            if(player->isProhibited(dama->from, slash)) return false;
+            delete slash;
+            if(player->askForSkillInvoke(objectName())){
+                room->broadcastSkillInvoke(objectName(), qrand()%2 + 1);
+                for(int i = 0; i < player->getLostHp(); i ++){
+                    if(dama->from->isDead()) break;
+                    JudgeStruct judge;
+                    judge.reason = objectName();
+                    judge.who = player;
+                    judge.pattern = QRegExp("(.*):(heart|diamond):(.*)");
+                    judge.good = true;
+                    judge.play_animation = true;
+                    room->judge(judge);
+                    if(judge.isGood() && dama->from->isAlive()){
+                        Slash *slash = new Slash(Card::NoSuit, 0);
+                        slash->setSkillName(objectName());
+                        CardUseStruct use;
+                        use.card = slash;
+                        use.from = player;
+                        use.to << dama->from;
+                        room->useCard(use, false);
+                    }
+                }
+            }
+            break;
+        }
+        case Dying:{
+            DyingStruct dying = data.value<DyingStruct>();
+            if(dying.who->hasSkill(objectName())){
+                room->broadcastSkillInvoke(objectName(), 3);
+                dying.who->drawCards(3);
+            }
+            break;
+        }
+        }
+        return false;
+    }
+};
+
+class SRShizhang: public TriggerSkill{
+public:
+    SRShizhang():TriggerSkill("srshizhang"){
+        frequency = Compulsory;
+        events << TargetConfirming;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardUseStruct use = data.value<CardUseStruct>();
+        if(!use.card->isKindOf("Slash") || !use.to.contains(player)) return false;
+        int x = qrand()%4 + 1;
+        if(x == 1){
+            QList<ServerPlayer *>targets = room->getAlivePlayers();
+            int n = targets.length();
+            if(n > 0){
+                int a = qrand()%(n - 1);
+                ServerPlayer *target = targets.at(a);
+                if(targer != player){
+                    use.to.insert(use.to.indexOf(player), target);
+                    use.to.removeOne(player);
+                    room->broadcastSkillInvoke(objectName(), target->isMale()?1:2);
+                    LogMessage log;
+                    log.type = "#ShiZhang";
+                    log.from = player;
+                    log.arg = target->getGeneralName();
+                    room->sendLog(log);
+                    data = QVariant::fromValue(use);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2453,7 +2539,7 @@ SwordRainPackage::SwordRainPackage()
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-tri");
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-dis");
 
-    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange, *srwenhui, *srtiansha;
+    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange, *srwenhui, *srtiansha, *srchigui;
 
     srchonglou = new General(this, "srchonglou", "god");
     srchonglou->addSkill(new SRZongyuan);
@@ -2483,6 +2569,10 @@ SwordRainPackage::SwordRainPackage()
     srtiansha->addSkill(new SRGuili);
     srtiansha->addSkill(new SRGuiliAdd);
     related_skills.insertMulti("srguili", "#srguili-add");
+
+    srchigui = new General(this, "srchigui", "shu", 3);
+    srchigui->addSkill(new SRYuxue);
+    srchigui->addSkill(new SRShizhang);
 
     skills << new SRJuling;
 
