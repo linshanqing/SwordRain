@@ -2182,6 +2182,173 @@ public:
     }
 };
 
+SRBiheCard::SRBiheCard(){
+
+}
+
+bool SRBiheCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    return targets.isEmpty() && to_select != Self && to_select->getWeapon();
+}
+
+void SRBiheCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    ServerPlayer *dest = targets.first();
+    dest->addToPile("srbihe", subcards.first(), false);
+    CardMoveReason reason(CardMoveReason::S_REASON_PUT, source->objectName(), "srbihe", "");
+    room->moveCardTo(dest->getWeapon(), dest, source, Player::PlaceEquip, reason, true);
+}
+
+class SRBiheView: public OneCardViewAsSkill{
+public:
+    SRBiheView():OneCardViewAsSkill("srbihe"){
+
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return !to_select->isEquipped();
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        foreach(const Player *p, player->getSiblings()){
+            if(!p->getPile("srbihe").isEmpty())
+                return false;
+        }
+        return player->getWeapon() == NULL;
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        SRBiheCard *card = new SRBiheCard;
+        card->addSubcard(originalCard);
+        card->setSkillName(objectName());
+        return card;
+    }
+};
+
+class SRBihe: public TriggerSkill{
+public:
+    SRBihe():TriggerSkill("srbihe"){
+        events << EventPhaseStart << CardsMoveOneTime << EventLoseSkill;
+        view_as_skill = new SRBiheView;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case EventPhaseStart:{
+            if(player->getPhase() == Player::Start && player->getWeapon() == NULL){
+                CardMoveReason reason(CardMoveReason::S_REASON_PUT, player->objectName(), objectName(), "");
+                if(player->hasSkill(objectName())){
+                    foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+                        if(!p->getPile("srbihe").isEmpty() && p->getWeapon()){
+                            room->moveCardTo(p->getWeapon(), p, player, Player::PlaceEquip, reason, true);
+                        }
+                    }
+                }else{
+                    if(!player->getPile("srbihe").isEmpty()){
+                        foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+                            if(p->hasSkill(objectName()) && p->getWeapon()){
+                                room->moveCardTo(p->getWeapon(), p, player, Player::PlaceEquip, reason, true);
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        case CardsMoveOneTime:{
+            CardsMoveOneTimeStar move = data.value<CardsMoveOneTimeStar>();
+            if(move->from_places.contains(Player::PlaceEquip) && player->getWeapon() == NULL){
+                if(player->hasSkill(objectName())){
+                    foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+                        if(!p->getPile("srbihe").isEmpty() && !p->getWeapon())
+                            p->removePileByName("srbihe");
+                    }
+                }else{
+                    if(player->getPile("srbihe").length() > 0){
+                        foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+                            if(p->hasSkill(objectName()) && !p->getWeapon())
+                                player->removePileByName("srbihe");
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        case EventLoseSkill:{
+            if(data.toStringList.contains(objectName())){
+                foreach(ServerPlayer *p, room->getAlivePlayers()){
+                    if(!p->getPile("srbihe").isEmpty())
+                        p->removePileByName("srbihe");
+                }
+            }
+            break;
+        }
+        default: break;
+        }
+        return false;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target->hasSkill(objectName()) || target->getPile("srbihe").length() > 0;
+    }
+};
+
+class SRGongying: public PhaseChangeSkill{
+public:
+    SRGongying():PhaseChangeSkill("srgongying"){
+
+    }
+
+    virtual bool onPhaseChange(ServerPlayer *target) const{
+        if(target->getPhase() != Player::Finish) return false;
+        Room *room = target->getRoom();
+        QList<ServerPlayer *>targets;
+        foreach(ServerPlayer *p, room->getAlivePlayers()){
+            if(p->getHandcardNum() < p->getHp())
+                targets << p;
+        }
+        if(targets.isEmpty() || !target->askForSkillInvoke(objectName())) return false;
+        ServerPlayer *dest = room->askForPlayerChosen(target, targets, objectName());
+        room->broadcastSkillInvoke(objectName());
+        dest->drawCards(1);
+        return false;
+    }
+};
+
+class SRGuili: public ProhibitSkill{
+public:
+    SRGuili():ProhibitSkill("srguili"){
+
+    }
+
+    virtual bool isProhibited(const Player *from, const Player *to, const Card *card) const{
+        return to->hasSkill(objectName()) && !from->getMark("srguili") &&
+                (card->isKindOf("Duel") || card->isKindOf("Collateral") || card->isKindOf("ThunderSlash") || card->isKindOf("FireSlash"));
+    }
+};
+
+class SRGuiliAdd: public TriggerSkill{
+public:
+    SRGuiliAdd():TriggerSkill("#srguili-add"){
+        frequency = Compulsory;
+        events << TargetConfirmed;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->hasSkill(objectName()) && target->isAlive();
+    }
+
+    virtual bool trigger(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardUseStruct use = data.value<CardUseStruct>();
+        const Card *card = use.card;
+        if(use.from == player && (card->isKindOf("Duel") || card->isKindOf("Snatch"))){
+            foreach(ServerPlayer *p, use.to){
+                if(!p->getMark("srguili"))
+                    p->gainMark("srguili");
+            }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2286,7 +2453,7 @@ SwordRainPackage::SwordRainPackage()
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-tri");
     related_skills.insertMulti("srzhuansheng", "#zhuansheng-dis");
 
-    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange, *srwenhui;
+    General *srchonglou, *srjingtian, *srwangxiaohu, *srleiyuange, *srwenhui, *srtiansha;
 
     srchonglou = new General(this, "srchonglou", "god");
     srchonglou->addSkill(new SRZongyuan);
@@ -2310,6 +2477,13 @@ SwordRainPackage::SwordRainPackage()
     srwenhui->addSkill(new SRZhige);
     //srwenhui->addRelateSkill("yuanxing");//this also need to change according to other's codes
 
+    srtiansha = new General(this, "srtiansha", "shu", 3);
+    srtiansha->addSkill(new SRBihe);
+    srtiansha->addSkill(new SRGongying);
+    srtiansha->addSkill(new SRGuili);
+    srtiansha->addSkill(new SRGuiliAdd);
+    related_skills.insertMulti("srguili", "#srguili-add");
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
@@ -2318,6 +2492,7 @@ SwordRainPackage::SwordRainPackage()
     addMetaObject<SRFenwuCard>();
     addMetaObject<SRMiyinCard>();
     addMetaObject<SRGuifuCard>();
+    addMetaObject<SRBiheCard>();
 }
 
 ADD_PACKAGE(SwordRain)
