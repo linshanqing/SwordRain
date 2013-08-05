@@ -1053,7 +1053,7 @@ public:
     }
 
     virtual const Card *viewAs(const Card *originalCard) const{
-        TanyunSnatch *snatch = new TanyunSnatch(originalCard->getSuit(), originalCard->getNumber());
+        Snatch *snatch = new Snatch(originalCard->getSuit(), originalCard->getNumber());
         snatch->addSubcard(originalCard);
         snatch->setSkillName(objectName());
         return snatch;
@@ -1088,7 +1088,7 @@ public:
         QList<int>ids = move->card_ids;
         Duel *duel;
         if(ids.length() == 1){
-            Card *card = Sanguosha->getCard(id);
+            Card *card = Sanguosha->getCard(ids.first());
             duel = new Duel(card->getSuit(), card->getNumber());
         }else
             duel = new Duel(Card::NoSuit, 0);
@@ -1111,7 +1111,7 @@ public:
             move.to_place = Player::DiscardPile;
             CardMoveReason reason(CardMoveReason::S_REASON_DISCARD, player->objectName());
             move.reason = reason;
-            room->moveCards(move);
+            room->moveCards(move, true);
         }else{
             foreach(int id, ids){
                 duel->addSubcard(id);
@@ -1119,7 +1119,7 @@ public:
             CardUseStruct use;
             use.card = duel;
             use.from = player;
-            use.to = room->askForPlayerChosen(player, dests, objectName());
+            use.to << room->askForPlayerChosen(player, dests, objectName());
             room->useCard(use);
         }
         return false;
@@ -1144,10 +1144,10 @@ void SRFenwuCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &t
     CardUseStruct use1, use2;
     use1.card = slash1;
     use1.from = first;
-    use1.to = second;
+    use1.to << second;
     use2.from = second;
     use2.card = slash2;
-    use2.to = first;
+    use2.to << first;
     room->useCard(use1);
     room->useCard(use2);
     if(first && first->isAlive()) first->drawCards(1);
@@ -1212,7 +1212,7 @@ public:
             for(int i = 1; i <= 160; i++){
                 places[i] = places_data[i].value<Player::Place>();
                 players[i] = player_data[i].value<ServerPlayer *>();
-                room->moveCardTo(Sanguosha->getCard(i), players[i], places[i], , true);
+                room->moveCardTo(Sanguosha->getCard(i), players[i], places[i], true);
             }
             break;
         }
@@ -1303,7 +1303,7 @@ public:
         }
         if(card->isKindOf("Snatch")){
             int to_give = room->askForCardChosen(to, to, "hej", objectName());
-            CardMoveReason reason(CardMoveReason::S_REASON_EXTRACTION, effect.from);
+            CardMoveReason reason(CardMoveReason::S_REASON_EXTRACTION, effect.from->objectName());
             room->moveCardTo(Sanguosha->getCard(to_give), to, effect.from, Player::PlaceHand, reason);
             return true;
         }
@@ -1389,7 +1389,7 @@ public:
             room->loseHp(player);
             RecoverStruct reco;
             reco.who = player;
-            room->recover(who, roco);
+            room->recover(who, reco);
         }
         return false;
     }
@@ -1566,7 +1566,8 @@ public:
         frequency = Compulsory;
     }
 
-    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+    virtual bool onPhaseChange(ServerPlayer *player) const{
+        Room *room = player->getRoom();
         if(player->getPhase() != Player::Start)
             return false;
         int x = 0;
@@ -1837,7 +1838,7 @@ public:
     }
 
     virtual void onDamaged(ServerPlayer *target, const DamageStruct &damage) const{
-        if(target->isKongcheng()) return false;
+        if(target->isKongcheng()) return;
         Room *room = target->getRoom();
         int total = 0, count = 0;
         QList<int>card_ids;
@@ -1858,14 +1859,14 @@ public:
                     LogMessage log;
                     log.from = p;
                     log.type = "#damage";
-                    log.arg = sum;
+                    log.arg = total;
                     room->sendLog(log);
                     room->loseHp(p);
                     CardsMoveStruct move;
                     move.card_ids = card_ids;
                     move.to_place = Player::DiscardPile;
                     room->moveCardsAtomic(move, true);
-                    if(damage.from && damage.from != player && !damage.from->isNude()){
+                    if(damage.from && damage.from != p && !damage.from->isNude()){
                         LogMessage log;
                         log.from = p;
                         log.type = "#obtain";
@@ -1873,7 +1874,7 @@ public:
                         int id = room->askForCardChosen(p, damage.from, "he", objectName());
                         room->obtainCard(p, id, room->getCardPlace(id) == Player::PlaceEquip);
                     }
-                    return false;
+                    return;
                 }
                 if(total == 21){
                     p->drawCards(count);
@@ -1882,7 +1883,7 @@ public:
                     move.card_ids = card_ids;
                     move.to_place = Player::DiscardPile;
                     room->moveCardsAtomic(move, true);
-                    return false;
+                    return;
                 }
             }
         }
@@ -1906,8 +1907,8 @@ public:
         QList<CardsMoveStruct> moves;
         moves.push_back(get);
         moves.push_back(thr);
-        room->moveCardsAtomic(move, true);
-        return false;
+        room->moveCardsAtomic(moves, true);
+        return;
     }
 };
 
@@ -1983,7 +1984,9 @@ public:
             if(!p->isNude() && p != to)
                 targets << p;
         }
-        room->setTag("CYvictim", QVariant(to));
+        QVariant tag;
+        tag.setValue(to);
+        room->setTag("CYvictim", tag);
         if(!targets.isEmpty() && player->askForSkillInvoke(objectName())){
             ServerPlayer *target = room->askForPlayerChosen(player, targets, objectName());
             if(player->inMyAttackRange(target)  && to->inMyAttackRange(target)){
@@ -2273,7 +2276,7 @@ public:
             break;
         }
         case EventLoseSkill:{
-            if(data.toStringList.contains(objectName())){
+            if(data.toStringList().contains(objectName())){
                 foreach(ServerPlayer *p, room->getAlivePlayers()){
                     if(!p->getPile("srbihe").isEmpty())
                         p->removePileByName("srbihe");
@@ -2417,7 +2420,7 @@ public:
             if(n > 0){
                 int a = qrand()%(n - 1);
                 ServerPlayer *target = targets.at(a);
-                if(targer != player){
+                if(target != player){
                     use.to.insert(use.to.indexOf(player), target);
                     use.to.removeOne(player);
                     room->broadcastSkillInvoke(objectName(), target->isMale()?1:2);
@@ -2432,6 +2435,84 @@ public:
             }
         }
         return false;
+    }
+};
+
+class SRTudu: public TriggerSkill{
+public:
+    SRTudu():TriggerSkill("srtudu"){
+        events << Damage;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        DamageStar dama = data.value<DamageStar>();
+        if(dama->to == NULL || dama->to->isDead()) return false;
+        if(!dama->to->getMark("@poison")){
+            int x = qrand()%((player->getDefensiveHorse() || player->getOffensiveHorse())?10:15);
+            if(x <= 6 && player->askForSkillInvoke(objectName())){
+                dama->to->gainMark("@poison");
+            }
+        }
+        return false;
+    }
+};
+
+class SRTuduEffect: public DrawCardsSkill{
+public:
+    SRTuduEffect():DrawCardsSkill("#srtudu-effect"){
+
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && target->getMark("@poison");
+    }
+
+    virtual int getDrawNum(ServerPlayer *player, int n) const{
+        if(player->isKongcheng()){
+            player->loseAllMarks("@poison");
+            return n;
+        }else{
+            Room *room = player->getRoom();
+            if(room->askForCard(player, "Slash,Analeptic", "@AskForJiedu")){
+                player->loseAllMarks("@poison");
+                return n;
+            }else
+                return 1;
+        }
+        return 1;
+    }
+};
+
+class SRFenglue: public TriggerSkill{
+public:
+    SRFenglue():TriggerSkill("srfenglue"){
+        events << CardsMoveOneTime;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        QList<int>cdlist;
+        CardsMoveOneTimeStruct move = data.value<CardsMoveOneTimeStruct>();
+        ServerPlayer *source = room->findPlayerBySkillName(objectName());
+        ServerPlayer *current = room->getCurrent();
+        if(current != player){
+            if(move.to && (move.to_place == Player::PlaceHand || move.to_place == Player::PlaceEquip)
+                    && move.to == player && (!move.from || move.from != player)){
+                cdlist = move.card_ids;
+            }
+        }
+        if(cdlist.isEmpty() || !source ||source->isNude()) return false;
+        QVariant ai_data;
+        ai_data.setValue(player);
+        foreach(int id, cdlist){
+            if(!room->askForSkillInvoke(source, objectName(), ai_data) ||
+                    !room->askForCard(source, ".|spade,club|.|.", "@fenglue")) return false;
+            room->obtainCard(source, id, true);
+        }
+        return false;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return !target->hasSkill(objectName());
     }
 };
 
@@ -2573,6 +2654,16 @@ SwordRainPackage::SwordRainPackage()
     srchigui = new General(this, "srchigui", "shu", 3);
     srchigui->addSkill(new SRYuxue);
     srchigui->addSkill(new SRShizhang);
+
+    General *srguimu, *srfeizei;
+
+    srguimu = new General(this, "srguimu", "god", 4, false);
+    srguimu->addSkill(new SRTudu);
+    srguimu->addSkill(new SRTuduEffect);
+    related_skills.insertMulti("srtudu", "#srtudu-effect");
+
+    srfeizei = new General(this, "srfeizei", "qun", 3, false);
+    srfeizei->addSkill(new SRFenglue);
 
     skills << new SRJuling;
 
