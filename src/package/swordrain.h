@@ -90,4 +90,11 @@ public:
     virtual void use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const;
 };
 
+class SRJiahuoCard: public SkillCard{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE SRJiahuoCard();
+};
+
 #endif // SWORDRAIN_H

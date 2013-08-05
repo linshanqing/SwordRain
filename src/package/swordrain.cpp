@@ -2516,6 +2516,187 @@ public:
     }
 };
 
+class SRDuntuo: public TriggerSkill{
+public:
+    SRDuntuo():TriggerSkill("srduntuo"){
+        events << Damaged << EventPhaseStart;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        switch(event){
+        case Damaged:{
+            DamageStar damage = data.value<DamageStar>();
+            if(damage->damage == 1 && !player->getMark("@escape") && player->askForSkillInvoke(objectName()))
+                player->gainMark("@escape");
+            break;
+        }
+        case EventPhaseStart:{
+            if(player->getPhase() == Player::Finish && player->getMark("@escape"))
+                player->loseAllMarks("@escape");
+            break;
+        }
+        }
+        return false;
+    }
+};
+
+class SRDuntuoDis: public DistanceSkill{
+public:
+    SRDuntuoDis():DistanceSkill("#srduntuo-dis"){
+        frequency = NotFrequent;
+    }
+
+    virtual int getCorrect(const Player *from, const Player *to) const{
+        if(from->getMark("@escape") || to->getMark("@escape"))
+            return 999;
+        else{
+            QList<const Player*>sib = from->getSiblings();
+            bool n = false;
+            foreach(const Player *p, sib){
+                if(p->isAlive() && p->getMark("@escape")){
+                    n = true;
+                    break;
+                }
+            }
+            if(n){
+                QList<const Player*>others;
+                int fromseat = from->getSeat();
+                foreach(const Player *p, sib){
+                    if(p->getSeat() > fromseat && p->isAlive())
+                        others.append(p);
+                }
+                foreach(const Player *p, sib){
+                    if(p->getSeat() < fromseat && p->isAlive())
+                        others.append(p);
+                }
+                int x = others.length();
+                int semi = (x - 1)/2;
+                int toseat = -1;
+                for(int i = 0; i < others.length(); i++){
+                    if(others.at(i) == to){
+                        toseat = i;
+                        break;
+                    }
+                }
+                if(toseat < semi){
+                    int y = 0;
+                    for(int i = 0; i < toseat; i ++){
+                        const Player *p = others.at(i);
+                        if(p->isAlive() && p->getMark("@escape"))
+                            y ++;
+                    }
+                    return -y;
+                }else{
+                    if(toseat > semi){
+                        int y = 0;
+                        for(int i = others.length() - 1; i > toseat; i --){
+                            const Player *p = others.at(i);
+                            if(p->isAlive() && p->getMark("@escape"))
+                                y ++;
+                        }
+                        return -y;
+                    }else{
+                        int y1 = 0, y2 = 0;
+                        for(int i = 0; i < others.length(); i ++){
+                            const Player *p = others.at(i);
+                            if(p->isAlive() && p->getMark("@escape")){
+                                if(i > semi)
+                                    y1 ++;
+                                if(i < semi)
+                                    y2 ++;
+                            }
+                        }
+                        return -qMax(y1, y2);
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+};
+
+SRJiahuoCard::SRJiahuoCard(){
+    target_fixed = true;
+}
+
+class SRJiahuoView: public OneCardViewAsSkill{
+public:
+    SRJiahuoView():OneCardViewAsSkill("srjianhuo"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return false;
+    }
+
+    virtual bool isEnabledAtResponse(const Player *player, const QString &pattern) const{
+        return pattern == "@srjiahuo" && !player->hasUsed("SRJiahuoCard");
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return to_select->isRed() && !to_select->isEquipped();
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        SRJiahuoCard *card = new SRJiahuoCard;
+        card->addSubcard(originalCard);
+        card->setSkillName(objectName());
+        return card;
+    }
+};
+
+class SRJiahuo: public TriggerSkill{
+public:
+    SRJiahuo():TriggerSkill("srjiahuo"){
+        view_as_skill = new SRJiahuoView;
+        events << TargetConfirmed << CardEffected;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        Room *room = target->getRoom();
+        ServerPlayer *source = room->findPlayerBySkillName(objectName());
+        return source && source->isAlive() && !source->isKongcheng();
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        ServerPlayer *source = room->findPlayerBySkillName(objectName());
+        switch(event){
+        case TargetConfirmed:{
+            CardUseStruct use = data.value<CardUseStruct>();
+            QList<ServerPlayer *>targets = use.to;
+            const Card *card = use.card;
+            ServerPlayer *target;
+            if(targets.length() == 1){
+                target = targets.first();
+                if(card->isNDTrick() && !target->hasFlag(objectName()) && room->askForUseCard(source, "@srjiahuo", "@@srjiahuo")){
+                    room->setPlayerFlag(target, objectName());
+                }
+            }
+            break;
+        }
+        case CardEffected:{
+            CardEffectStruct effect = data.value<CardEffectStruct>();
+            const Card *card = effect.card;
+            ServerPlayer *from = effect.from, *to = effect.to;
+            if(to->hasFlag(objectName()) && card->isNDTrick()){
+                room->setPlayerFlag(to, "-srjiahuo");
+                Slash *slash = new Slash(card->getSuit(), card->getNumber());
+                slash->addSubcard(card);
+                slash->setSkillName(objectName());
+                CardUseStruct use;
+                use.card = slash;
+                use.from = from;
+                use.to << to;
+                room->useCard(use);
+                return true;
+            }
+            break;
+        }
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2664,6 +2845,10 @@ SwordRainPackage::SwordRainPackage()
 
     srfeizei = new General(this, "srfeizei", "qun", 3, false);
     srfeizei->addSkill(new SRFenglue);
+    srfeizei->addSkill(new SRDuntuo);
+    srfeizei->addSkill(new SRDuntuoDis);
+    srfeizei->addSkill(new SRJiahuo);
+    related_skills.insertMulti("srduntuo", "#srduntuo-dis");
 
     skills << new SRJuling;
 
@@ -2674,6 +2859,7 @@ SwordRainPackage::SwordRainPackage()
     addMetaObject<SRMiyinCard>();
     addMetaObject<SRGuifuCard>();
     addMetaObject<SRBiheCard>();
+    addMetaObject<SRJiahuoCard>();
 }
 
 ADD_PACKAGE(SwordRain)
