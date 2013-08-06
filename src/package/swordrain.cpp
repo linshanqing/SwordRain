@@ -2697,6 +2697,32 @@ public:
     }
 };
 
+class SRXihua: public DrawCardsSkill{
+public:
+    SRXihua():DrawCardsSkill("srxihua"){
+        frequency = Wake;
+    }
+
+    virtual int getDrawNum(ServerPlayer *player, int n) const{
+        Room *room = player->getRoom();
+        int count = 0;
+        foreach(ServerPlayer *p, room->getOtherPlayers(player)){
+            if(p->isAlive() && !p->isMale())
+                count ++;
+        }
+        if(count == 1){
+            room->acquireSkill(player, "yuanhu");
+            room->acquireSkill(player, "nosjiefan");
+            room->loseMaxHp(player);
+            player->drawCards(2);
+            player->gainMark("@waked");
+        }
+        return n;
+    }
+};
+
+
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2836,7 +2862,7 @@ SwordRainPackage::SwordRainPackage()
     srchigui->addSkill(new SRYuxue);
     srchigui->addSkill(new SRShizhang);
 
-    General *srguimu, *srfeizei;
+    General *srguimu, *srfeizei, *spjingtian, *sptianhe;
 
     srguimu = new General(this, "srguimu", "god", 4, false);
     srguimu->addSkill(new SRTudu);
@@ -2849,6 +2875,11 @@ SwordRainPackage::SwordRainPackage()
     srfeizei->addSkill(new SRDuntuoDis);
     srfeizei->addSkill(new SRJiahuo);
     related_skills.insertMulti("srduntuo", "#srduntuo-dis");
+
+    spjingtian = new General(this, "spjingtian", "wu");
+
+    sptianhe = new General(this, "sptianhe", "wei", 4, true, true);
+    sptianhe->addSkill(new SRXihua);
 
     skills << new SRJuling;
 
