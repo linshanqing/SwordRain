@@ -69,6 +69,8 @@ void RoomScene::resetPiles()
 RoomScene::RoomScene(QMainWindow *main_window):
            main_window(main_window),game_started(false)
 {
+	Audio::stopBGM();
+
     m_choiceDialog = NULL;
     RoomSceneInstance = this;
     _m_last_front_item = NULL;

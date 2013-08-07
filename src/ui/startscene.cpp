@@ -23,6 +23,14 @@ StartScene::StartScene()
                        Config.Rect.height()/2 - website_text->boundingRect().height());
 
     server_log = NULL;
+	
+	//to play strange audio according to the demand of strange uncle Arrow
+	if (Config.EnableBgMusic) {
+      QString audio = QString("audio/system/background.ogg");
+      bool exists = QFile::exists(audio);
+      if (exists) Audio::playBGM(audio);
+	  Audio::setBGMVolume(Config.BGMVolume);
+	};
 }
 
 void StartScene::addButton(QAction *action){
