@@ -2721,7 +2721,132 @@ public:
     }
 };
 
+class SRDuzhu: public MasochismSkill{
+public:
+    SRDuzhu():MasochismSkill("srduzhu"){
+        frequency = Compulsory;
+    }
 
+    virtual void onDamaged(ServerPlayer *target, const DamageStruct &damage) const{
+        Room *room = target->getRoom();
+        if(target->isAlive()){
+            foreach(ServerPlayer *p, room->getOtherPlayers(target)){
+                if(p->isKongcheng()) continue;
+                const Card *card = room->askForExchange(p, objectName(), 1, false, "@zhu", false);
+                int id = card->getEffectiveId();
+                p->addToPile("zhu", id, false);
+                QString choice = room->askForChoice(p, objectName(), "big+small");
+                if(choice == "big"){
+                    room->setPlayerMark(p, "du", 2);
+                    LogMessage log;
+                    log.type = "#big";
+                    log.from = p;
+                    room->sendLog(log);
+                }else{
+                    room->setPlayerMark(p, "du", 1);
+                    LogMessage log;
+                    log.type = "#small";
+                    log.from = p;
+                    room->sendLog(log);
+                }
+            }
+            const Card *card = room->peek();
+            CardMoveReason reason(CardMoveReason::S_REASON_TURNOVER, target->objectName(), objectName(), QString());
+            room->moveCardTo(card, NULL, NULL, Player::PlaceTable, reason, true);
+            room->getThread()->delay(1000);
+            if(card->getNumber() == 7){
+                LogMessage log;
+                log.type = "#seven";
+                log.from = target;
+                room->sendLog(log);
+            }
+            foreach(ServerPlayer *p, room->getAlivePlayers()){
+                if((card->getNumber() < 7 && p->getMark("du") == 1) || (card->getNumber() > 7 && p->getMark("du") == 2)){
+                    if(!p->getPile("zhu").isEmpty()){
+                        int id = p->getPile("zhu").first();
+                        p->obtainCard(Sanguosha->getCard(id));
+                        p->drawCards(1);
+                    }
+                }else{
+                    if((card->getNumber() < 7 && p->getMark("du") == 2) || card->getNumber() > 7 && p->getMark("du") == 1){
+                        if(!p->getPile("zhu").isEmpty()){
+                            int id = p->getPile("zhu").first();
+                            p->obtainCard(Sanguosha->getCard(id));
+                        }
+                    }else{
+                        if(!p->getPile("zhu").isEmpty()){
+                            int id = p->getPile("zhu").first();
+                            room->throwCard(Sanguosha->getCard(id), NULL, NULL);
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+};
+
+SRDiandangCard::SRDiandangCard(){
+    will_throw = false;
+}
+
+bool SRDiandangCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const{
+    if(targets.isEmpty() && to_select != Self){
+        const Card *card = Sanguosha->getCard(this->getSubcards().first());
+        if(card->isKindOf("Weapon"))
+            return true;
+        if(card->isKindOf("Armor"))
+            return !to_select->getArmor();
+        if(card->isKindOf("DefensiveHorse"))
+            return !to_select->getDefensiveHorse();
+        if(card->isKindOf("OffensiveHorse"))
+            return !to_select->getOffensiveHorse();
+    }
+    return false;
+}
+
+bool SRDiandangCard::targetsFeasible(const QList<const Player *> &targets, const Player *Self) const{
+    return targets.length() == 1;
+}
+
+void SRDiandangCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    ServerPlayer *target = targets.first();
+    const Card *card = Sanguosha->getCard(this->getSubcards().first());
+    CardMoveReason reason(CardMoveReason::S_REASON_PUT, source->objectName(), "srdiandang", QString());
+    room->moveCardTo(card, source, target, Player::PlaceEquip, reason, true);
+    if(target->getHandcardNum() >= 2){
+        const Card *give = room->askForExchange(target, "srdiandang", 2, false, "diandanggive", false);
+        if(give)
+            room->moveCardTo(give, source, Player::PlaceHand);
+    }else{
+        DamageStruct damage;
+        damage.from = source;
+        damage.to = target;
+        room->damage(damage);
+    }
+}
+
+class SRDiandang: public OneCardViewAsSkill{
+public:
+    SRDiandang():OneCardViewAsSkill("srdiandang"){
+
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return to_select->isKindOf("EquipCard");
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        SRDiandangCard *card = new SRDiandangCard;
+        card->addSubcard(originalCard);
+        card->setSkillName(objectName());
+        return card;
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return player->usedTimes("SRDiandangCard") < 2;
+    }
+};
 
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
@@ -2877,6 +3002,8 @@ SwordRainPackage::SwordRainPackage()
     related_skills.insertMulti("srduntuo", "#srduntuo-dis");
 
     spjingtian = new General(this, "spjingtian", "wu");
+    spjingtian->addSkill(new SRDuzhu);
+    spjingtian->addSkill(new SRDiandang);
 
     sptianhe = new General(this, "sptianhe", "wei", 4, true, true);
     sptianhe->addSkill(new SRXihua);
@@ -2891,6 +3018,7 @@ SwordRainPackage::SwordRainPackage()
     addMetaObject<SRGuifuCard>();
     addMetaObject<SRBiheCard>();
     addMetaObject<SRJiahuoCard>();
+    addMetaObject<SRDiandangCard>();
 }
 
 ADD_PACKAGE(SwordRain)
