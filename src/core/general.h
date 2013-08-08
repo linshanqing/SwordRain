@@ -27,18 +27,18 @@ public:
     explicit General(Package *package, const QString &name, const QString &kingdom, int max_hp = 4, bool male = true, bool hidden = false, bool never_shown = false);
 
     // property getters/setters
-    int getMaxHp() const; //获取体力上限
-    QString getKingdom() const; //获取势力
-    bool isMale() const; //是否为男性
-    bool isFemale() const; //是否为女性
-    bool isNeuter() const; //是否为中性
-    bool isLord() const; //是否为主公
-    bool isHidden() const; //是否隐藏(选将时不出现,武将一览中可见)
-    bool isTotallyHidden() const; //是否永久隐藏(也不出现在武将一览中)
+    int getMaxHp() const;
+    QString getKingdom() const;
+    bool isMale() const;
+    bool isFemale() const;
+    bool isNeuter() const;
+    bool isLord() const;
+    bool isHidden() const;
+    bool isTotallyHidden() const;
 
-    enum Gender {SexLess, Male, Female, Neuter}; //性别枚举变量:无性别,男性,女性,中性
-    Gender getGender() const; //获取性别--返回性别枚举变量Gender
-    void setGender(Gender gender); //设置性别,参数为性别枚举变量
+    enum Gender {SexLess, Male, Female, Neuter};
+    Gender getGender() const;
+    void setGender(Gender gender);
 
     void addSkill(Skill* skill);
     void addSkill(const QString &skill_name);    

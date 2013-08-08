@@ -6,6 +6,7 @@
 #include <QParallelAnimationGroup>
 #include <QNetworkInterface>
 #include <QGraphicsDropShadowEffect>
+#include <QFile>
 
 StartScene::StartScene()
 {

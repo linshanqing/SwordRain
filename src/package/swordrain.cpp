@@ -1192,6 +1192,9 @@ public:
     }
 };
 
+QList<Player::Place>places;
+QList<ServerPlayer *>players;
+
 class SRHuimeng: public TriggerSkill{
 public:
     SRHuimeng():TriggerSkill("srhuimeng"){
@@ -1204,26 +1207,14 @@ public:
             return false;
         switch(event){
         case EventPhaseStart:{
-            QList<Player::Place>places;
-            QList<ServerPlayer *>players;
             for(int i = 1; i <= 160; i++){
                 places[i] = room->getCardPlace(i);
                 players[i] = room->getCardOwner(i);
             }
-            room->setTag("HuimengPlace", QVariant::fromValue(places));
-            room->setTag("HuimengPlayer", QVariant::fromValue(players));
             break;
         }
         case EventPhaseEnd:{
-            QList<Player::Place>places;
-            QList<ServerPlayer *>players;
-            QVariantList places_data = room->getTag("HuimengPlace").toList();
-            QVariantList player_data = room->getTag("HuimengPlayer").toList();
-            room->removeTag("HuimengPlace");
-            room->removeTag("HuimengPlayer");
             for(int i = 1; i <= 160; i++){
-                places[i] = places_data[i].value<Player::Place>();
-                players[i] = player_data[i].value<ServerPlayer *>();
                 room->moveCardTo(Sanguosha->getCard(i), players[i], places[i], true);
             }
             break;
@@ -2504,13 +2495,13 @@ public:
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         QList<int>cdlist;
-        CardsMoveOneTimeStruct move = data.value<CardsMoveOneTimeStruct>();
+        CardsMoveOneTimeStar move = data.value<CardsMoveOneTimeStar>();
         ServerPlayer *source = room->findPlayerBySkillName(objectName());
         ServerPlayer *current = room->getCurrent();
         if(current != player){
-            if(move.to && (move.to_place == Player::PlaceHand || move.to_place == Player::PlaceEquip)
-                    && move.to == player && (!move.from || move.from != player)){
-                cdlist = move.card_ids;
+            if(move->to && (move->to_place == Player::PlaceHand || move->to_place == Player::PlaceEquip)
+                    && move->to == player && (!move->from || move->from != player)){
+                cdlist = move->card_ids;
             }
         }
         if(cdlist.isEmpty() || !source ||source->isNude()) return false;
@@ -2884,7 +2875,7 @@ public:
         return !to_select->isEquipped();
     }
 
-    virtual const viewAs(const Card *originalCard) const{
+    virtual const Card *viewAs(const Card *originalCard) const{
         SRXianjingCard *card = new SRXianjingCard;
         card->addSubcard(originalCard);
         return card;
