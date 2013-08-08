@@ -108,4 +108,22 @@ public:
     virtual void use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const;
 };
 
+class SRXianjingCard: public SkillCard{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE SRXianjingCard();
+
+    virtual void use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const;
+};
+
+class SRJizhiCard: public SkillCard{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE SRJizhiCard();
+
+    virtual void use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const;
+};
+
 #endif // SWORDRAIN_H

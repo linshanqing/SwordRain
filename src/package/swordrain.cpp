@@ -588,8 +588,6 @@ public:
                 room->setPlayerMark(player, "HongfuCan", 0);
                 foreach(ServerPlayer *p, room->getPlayers()){
                     if(p->getMark("skip") && p->getHp()){
-                        p->setAlive(true);
-                        room->broadcastProperty(p, "alive");
                         room->setPlayerMark(p, "skip", 0);
                     }
                 }
@@ -611,9 +609,9 @@ public:
                     return false;
                 room->setPlayerMark(from, "HongfuCan", 1);
                 player->addMark("skip");
-                player->setAlive(false);
-                room->broadcastProperty(player, "alive");
+                player->clearHistory();
                 room->loseHp(from);
+                player->turnOver();//Turn it over, then it'll be turn over again, and thus its turn is skipped
                 if(from->getHp() < player->getHp())
                     room->setPlayerMark(from, "HongfuAtten", 1);
                 if(from->isAlive() && from->hasSkill(objectName())){
@@ -656,8 +654,6 @@ public:
         if(!tri) return false;
         foreach(ServerPlayer *p, room->getPlayers()){
             if(p->getMark("skip") && p->getHp() > 0){
-                p->setAlive(true);
-                room->broadcastProperty(p, "alive");
                 if(event == Death)
                     p->throwAllHandCards();
                 room->setPlayerMark(p, "skip", 0);
@@ -1140,32 +1136,48 @@ bool SRFenwuCard::targetsFeasible(const QList<const Player *> &targets, const Pl
 
 void SRFenwuCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
     ServerPlayer *first = targets.first(), *second = targets.last();
-    FireSlash *slash1 = new FireSlash(Card::NoSuit, 0), *slash2 = new FireSlash(Card::NoSuit, 0);
-    CardUseStruct use1, use2;
+    if(!source->isAlive() || !first->isAlive()) return;
+    Slash *slash1 = new Slash(Card::NoSuit, 0);
+    CardUseStruct use1;
+    use1.from = source;
+    use1.to << first;
     use1.card = slash1;
-    use1.from = first;
-    use1.to << second;
-    use2.from = second;
-    use2.card = slash2;
-    use2.to << first;
     room->useCard(use1);
+    if(!first->isAlive() || !second->isAlive()) return;
+    Slash *slash2 = new Slash(Card::NoSuit, 0);
+    CardUseStruct use2;
+    use2.from = first;
+    use2.to << second;
+    use2.card = slash2;
     room->useCard(use2);
-    if(first && first->isAlive()) first->drawCards(1);
-    if(second && second->isAlive()) second->drawCards(2);
+    if(!second->isAlive() || !source->isAlive()) return;
+    Slash *slash3 = new Slash(Card::NoSuit, 0);
+    CardUseStruct use3;
+    use3.from = second;
+    use3.to << source;
+    use3.card = slash3;
+    room->useCard(use3);
 }
 
-class SRFenwu: public ZeroCardViewAsSkill{
+class SRFenwu: public OneCardViewAsSkill{
 public:
-    SRFenwu():ZeroCardViewAsSkill("srfenwu"){
+    SRFenwu():OneCardViewAsSkill("srfenwu"){
 
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return to_select->isRed() && !to_select->isEquipped();
     }
 
     virtual bool isEnabledAtPlay(const Player *player) const{
         return !player->hasUsed("SRFenwuCard");
     }
 
-    virtual const Card *viewAs() const{
-        return new SRFenwuCard;
+    virtual const Card *viewAs(const Card *originalCard) const{
+        SRFenwuCard *card = new SRFenwuCard;
+        card->addSubcard(originalCard);
+        card->setSkillName(objectName());
+        return card;
     }
 };
 
@@ -2413,8 +2425,9 @@ public:
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         CardUseStruct use = data.value<CardUseStruct>();
         if(!use.card->isKindOf("Slash") || !use.to.contains(player)) return false;
-        int x = qrand()%4 + 1;
-        if(x == 1){
+        bool tri3 = (room->getAllPlayers(true).length() - room->getAlivePlayers().length()) > (room->getAllPlayers(true).length() / 2);
+        int x = qrand()%(tri3?36:48) + 1;
+        if(x <= 12){
             QList<ServerPlayer *>targets = room->getAlivePlayers();
             int n = targets.length();
             if(n > 0){
@@ -2848,6 +2861,252 @@ public:
     }
 };
 
+SRXianjingCard::SRXianjingCard(){
+    target_fixed = true;
+    will_throw = false;
+}
+
+void SRXianjingCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    source->addToPile("srxianjing", this->getSubcards(), false);
+}
+
+class SRXianjingView: public OneCardViewAsSkill{
+public:
+    SRXianjingView():OneCardViewAsSkill("srxianjing"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return player->getPile(objectName()).isEmpty();
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return !to_select->isEquipped();
+    }
+
+    virtual const viewAs(const Card *originalCard) const{
+        SRXianjingCard *card = new SRXianjingCard;
+        card->addSubcard(originalCard);
+        return card;
+    }
+};
+
+class SRXianjing: public TriggerSkill{
+public:
+    SRXianjing():TriggerSkill("srxianjing"){
+        events << TargetConfirming;
+        view_as_skill = new SRXianjingView;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        CardUseStruct use = data.value<CardUseStruct>();
+        if(!use.to.isEmpty() && use.to.contains(player) && use.card && (use.card->isKindOf("Slash") || use.card->isKindOf("SingleTargetTrick"))){
+            Card *xian = Sanguosha->getCard(player->getPile(objectName()).first());
+            if(!xian) return false;
+            if(xian->getType() == use.card->getType()){
+                bool res = false;
+                if(use.card->isKindOf("Slash")){
+                    res = room->askForUseSlashTo(use.from, player, "@srxianjing");
+                }else{
+                    const Card *card = room->askForCard(use.from, "SingleTargetTrick", "@srxianjing", data, Card::MethodNone);
+                    if(card){
+                        res = true;
+                        CardUseStruct use2;
+                        use2.card = card;
+                        use2.from = use.from;
+                        use2.to << player;
+                        room->useCard(use2);
+                    }
+                }
+                if(!res){
+                    DamageStruct dama;
+                    dama.from = player;
+                    dama.to = use.from;
+                    dama.nature = DamageStruct::Fire;
+                    room->damage(dama);
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+class SRLinglong: public TriggerSkill{
+public:
+    SRLinglong():TriggerSkill("srlinglong"){
+        events << Damaged << EventPhaseStart;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        if(event == Damaged){
+            if(player->getPhase() == Player::NotActive && !player->getMark("linglong"))
+                room->setPlayerMark(player, "linglong", 1);
+        }else{
+            if(!player->getPhase() == Player::Start)
+                return false;
+            else{
+                room->setPlayerMark(player, "linglongExtar", 0);
+                if(player->getMark("linglong"))
+                    room->setPlayerMark(player, "linglong", 0);
+                else{
+                    if(room->askForSkillInvoke(player, objectName(), data)){
+                        QString choice = room->askForChoice(player, objectName(), "drawMore+extraSlash");
+                        if(choice == "drawMore"){
+                            player->skip(Player::Discard);
+                            room->setPlayerMark(player, "linglongDraw", 1);
+                        }else{
+                            player->skip(Player::Judge);
+                            room->setPlayerMark(player, "linglongExtar", 1);
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+};
+
+class SRLinglongDraw: public DrawCardsSkill{
+public:
+    SRLinglongDraw():DrawCardsSkill("#srlinglong-draw"){
+
+    }
+
+    virtual int getDrawNum(ServerPlayer *player, int n) const{
+        if(player->hasSkill("srlinglong") && player->getMark("linglongDraw")){
+            player->setMark("linglongDraw", 0);
+            return n+1;
+        }
+        return n;
+    }
+};
+
+class SRLinglongTar: public TargetModSkill{
+public:
+    SRLinglongTar():TargetModSkill("#srlinglong-tar"){
+
+    }
+
+    virtual int getResidueNum(const Player *from, const Card *card) const{
+        if(from->hasSkill("srlinglong") && from->getMark("linglongExtra"))
+            return 1;
+        else
+            return 0;
+    }
+};
+
+class SRDanyun: public DrawCardsSkill{
+public:
+    SRDanyun():DrawCardsSkill("srdanyun"){
+
+    }
+
+    virtual int getDrawNum(ServerPlayer *player, int n) const{
+        Room *room = player->getRoom();
+        if(room->askForSkillInvoke(player, objectName())){
+            QString choice = room->askForChoice(player, objectName(), "red+black");
+            QList<int>ids = room->getNCards(5, false);
+            CardsMoveStruct move;
+            move.card_ids = ids;
+            move.to_place = Player::PlaceTable;
+            CardMoveReason reason(CardMoveReason::S_REASON_TURNOVER, player->objectName());
+            move.reason = reason;
+            room->moveCardsAtomic(move, true);
+            room->getThread()->delay();
+            QList<int>reds, blacks;
+            foreach(int id, ids){
+                Card *card = Sanguosha->getCard(id);
+                if(card->isRed())
+                    reds << id;
+                else
+                    blacks << id;
+            }
+            bool redOver = reds.length() > blacks.length();
+            bool choiceOver = (choice == "red")?true:false;
+            CardsMoveStruct get, dis;
+            QList<CardsMoveStruct>moves;
+            get.to = player;
+            get.to_place = Player::PlaceHand;
+            CardMoveReason getreason(CardMoveReason::S_REASON_GOTBACK, player->objectName());
+            get.reason = getreason;
+            dis.to_place = Player::DiscardPile;
+            if(redOver == choiceOver){
+                get.card_ids = redOver?reds:blacks;
+                dis.card_ids = redOver?blacks:reds;
+            }else{
+                get.card_ids = redOver?blacks:reds;
+                dis.card_ids = redOver?reds:blacks;
+            }
+            moves.push_back(get);
+            moves.push_back(dis);
+            room->moveCardsAtomic(moves, true);
+            return 0;
+        }
+        return n;
+    }
+};
+
+SRJizhiCard::SRJizhiCard(){
+    target_fixed = true;
+    will_throw = false;
+}
+
+void SRJizhiCard::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    source->getNextAlive()->addToPile("zhishang", this->getSubcards());
+}
+
+class SRJizhiView: public OneCardViewAsSkill{
+public:
+    SRJizhiView():OneCardViewAsSkill("srjizhi"){
+
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        foreach(const Player *p, player->getSiblings()){
+            if(!p->getPile("zhishang").isEmpty())
+                return false;
+        }
+        return !player->isKongcheng();
+    }
+
+    virtual bool viewFilter(const Card *to_select) const{
+        return !to_select->isEquipped();
+    }
+
+    virtual const Card *viewAs(const Card *originalCard) const{
+        SRJizhiCard *card = new SRJizhiCard;
+        card->addSubcard(originalCard);
+        return card;
+    }
+};
+
+class SRJizhi: public TriggerSkill{
+public:
+    SRJizhi():TriggerSkill("srjizhi"){
+        events << EventPhaseStart;
+        view_as_skill = new SRJizhiView;
+    }
+
+    virtual bool triggerable(const ServerPlayer *target) const{
+        return target && !target->getPile("zhishang").isEmpty() && target->getPhase() == Player::Start;
+    }
+
+    virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
+        if(player->isKongcheng()){
+            ServerPlayer *source = room->findPlayerBySkillName(objectName());
+            if(source)
+                source->drawCards(1);
+            player->getNextAlive()->addToPile("zhishang", player->getPile("zhishang"));
+        }else{
+            const Card *card = room->askForExchange(player, objectName(), 1, false, "@jizhi", false);
+            player->getNextAlive()->addToPile("zhishang", card);
+            player->obtainCard(Sanguosha->getCard(player->getPile("zhishang").first()), true);
+        }
+        return false;
+    }
+};
+
 SwordRainPackage::SwordRainPackage()
     :Package("swordrain")
 {
@@ -2987,7 +3246,7 @@ SwordRainPackage::SwordRainPackage()
     srchigui->addSkill(new SRYuxue);
     srchigui->addSkill(new SRShizhang);
 
-    General *srguimu, *srfeizei, *spjingtian, *sptianhe;
+    General *srguimu, *srfeizei, *spjingtian, *sptianhe, *spxiaoman, *xiahoujinxuan;
 
     srguimu = new General(this, "srguimu", "god", 4, false);
     srguimu->addSkill(new SRTudu);
@@ -3008,6 +3267,18 @@ SwordRainPackage::SwordRainPackage()
     sptianhe = new General(this, "sptianhe", "wei", 4, true, true);
     sptianhe->addSkill(new SRXihua);
 
+    spxiaoman = new General(this, "spxiaoman", "shu", 3, false);
+    spxiaoman->addSkill(new SRXianjing);
+    spxiaoman->addSkill(new SRLinglong);
+    spxiaoman->addSkill(new SRLinglongDraw);
+    spxiaoman->addSkill(new SRLinglongTar);
+    related_skills.insertMulti("srlinglong", "#srlinglong-draw");
+    related_skills.insertMulti("srlinglong", "#srlinglong-tar");
+
+    xiahoujinxuan = new General(this, "xiahoujinxuan", "god", 3, false);
+    xiahoujinxuan->addSkill(new SRDanyun);
+    xiahoujinxuan->addSkill(new SRJizhi);
+
     skills << new SRJuling;
 
     addMetaObject<SRLengyueCard>();
@@ -3019,6 +3290,8 @@ SwordRainPackage::SwordRainPackage()
     addMetaObject<SRBiheCard>();
     addMetaObject<SRJiahuoCard>();
     addMetaObject<SRDiandangCard>();
+    addMetaObject<SRXianjingCard>();
+    addMetaObject<SRJizhiCard>();
 }
 
 ADD_PACKAGE(SwordRain)
