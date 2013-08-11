@@ -2892,11 +2892,13 @@ public:
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
         CardUseStruct use = data.value<CardUseStruct>();
         if(!use.to.isEmpty() && use.to.contains(player) && use.card && (use.card->isKindOf("Slash") || use.card->isKindOf("SingleTargetTrick"))){
-            Card *xian = Sanguosha->getCard(player->getPile(objectName()).first());
+            Card *xian = Sanguosha->getCard(player->getPile("srxianjing").first());
             if(!xian) return false;
+            player->removePileByName("srxinjiang");
             if(xian->getType() == use.card->getType()){
                 bool res = false;
                 if(use.card->isKindOf("Slash")){
+                    player->addHistory("slash", -1);
                     res = room->askForUseSlashTo(use.from, player, "@srxianjing");
                 }else{
                     const Card *card = room->askForCard(use.from, "SingleTargetTrick", "@srxianjing", data, Card::MethodNone);
@@ -2934,7 +2936,7 @@ public:
             if(player->getPhase() == Player::NotActive && !player->getMark("linglong"))
                 room->setPlayerMark(player, "linglong", 1);
         }else{
-            if(!player->getPhase() == Player::Start)
+            if(player->getPhase() != Player::Start)
                 return false;
             else{
                 room->setPlayerMark(player, "linglongExtar", 0);
