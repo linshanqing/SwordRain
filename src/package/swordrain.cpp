@@ -2885,30 +2885,28 @@ public:
 class SRXianjing: public TriggerSkill{
 public:
     SRXianjing():TriggerSkill("srxianjing"){
-        events << TargetConfirming;
+        events << CardEffected;
         view_as_skill = new SRXianjingView;
     }
 
     virtual bool trigger(TriggerEvent event, Room *room, ServerPlayer *player, QVariant &data) const{
-        CardUseStruct use = data.value<CardUseStruct>();
-        if(!use.to.isEmpty() && use.to.contains(player) && use.card && (use.card->isKindOf("Slash") || use.card->isKindOf("SingleTargetTrick"))){
+        CardEffectStruct effect = data.value<CardEffectStruct>();
+        if(effect.to == player && effect.card && (effect.card->isKindOf("Slash") || effect.card->isKindOf("SingleTargetTrick"))){
             Card *xian = Sanguosha->getCard(player->getPile("srxianjing").first());
             if(!xian) return false;
-            player->removePileByName("srxinjiang");
+            room->showCard(player, xian->getEffectiveId());
+            player->removePileByName("srxianjiang");
             if(xian->getType() == use.card->getType()){
                 bool res = false;
                 if(use.card->isKindOf("Slash")){
                     player->addHistory("slash", -1);
-                    res = room->askForUseSlashTo(use.from, player, "@srxianjing");
+                    const Card *card = room->askForCard(use.from, "slash", "@srxianjing");
+                    if(card)
+                        res = true;
                 }else{
-                    const Card *card = room->askForCard(use.from, "SingleTargetTrick", "@srxianjing", data, Card::MethodNone);
+                    const Card *card = room->askForCard(use.from, "SingleTargetTrick", "@srxianjing");
                     if(card){
                         res = true;
-                        CardUseStruct use2;
-                        use2.card = card;
-                        use2.from = use.from;
-                        use2.to << player;
-                        room->useCard(use2);
                     }
                 }
                 if(!res){
